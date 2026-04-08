@@ -1,7 +1,7 @@
 import { google } from "@ai-sdk/google";
 import { streamText } from "ai";
 
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 const SYSTEM_PROMPT = `You are an expert church media director and YouTube strategist. Your task is to analyze a sermon transcript and provide high-quality, non-clickbaity metadata and clip suggestions.
 
