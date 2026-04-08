@@ -7,6 +7,12 @@ const SYSTEM_PROMPT = `You are an expert church media director and YouTube strat
 
 CRITICAL RULES:
 
+FORMATTING RULES:
+1. Do NOT use bullet points or dashes.
+2. Put every chapter on its own new line.
+3. For Clips, put the Title, Timestamp, and Description on separate lines.
+4. Use a double line break (Press Enter twice) between Option 1, Option 2, and Option 3.
+
 Return ONLY the requested sections below. Do not include any conversational preamble, greetings, or disclaimers.
 
 Every major section (Description, Chapters, Social Clips, etc.) MUST start with a ### header. Do not use ## or #. This is critical for the UI layout.

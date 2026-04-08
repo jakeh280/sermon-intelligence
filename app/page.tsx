@@ -209,7 +209,7 @@ function BentoCard({
           <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
         )}
       </header>
-      <div className="min-w-0 flex-1 text-zinc-300">
+      <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
         {body ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
             {body}
@@ -258,8 +258,11 @@ function PromoCard() {
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [uploadedText, setUploadedText] = useState("");
+  const [pastedText, setPastedText] = useState("");
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -329,7 +332,10 @@ export default function Home() {
       const reader = new FileReader();
       reader.onload = () => {
         const text = typeof reader.result === "string" ? reader.result : "";
-        void runWithText(text, file.name);
+        setFileName(file.name);
+        setUploadedText(text);
+        setErrorMessage(null);
+        setStatus("idle");
       };
       reader.onerror = () => {
         setStatus("error");
@@ -360,6 +366,22 @@ export default function Home() {
       setStatus("error");
     }
   }, [output]);
+
+  const handleGenerate = useCallback(() => {
+    if (status === "loading") return;
+    const text = inputMode === "paste" ? pastedText : uploadedText;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setStatus("error");
+      setErrorMessage(
+        inputMode === "paste"
+          ? "Please paste a transcript before generating."
+          : "Please upload a .txt or .srt file before generating.",
+      );
+      return;
+    }
+    void runWithText(trimmed, inputMode === "upload" ? fileName : "Pasted text");
+  }, [fileName, inputMode, pastedText, runWithText, status, uploadedText]);
 
   const showBento = output.length > 0 || status === "loading";
   const streaming = status === "loading";
@@ -409,68 +431,122 @@ export default function Home() {
         </header>
 
         <section className="flex flex-col gap-6">
-          <div
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                inputRef.current?.click();
-              }
-            }}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setDragActive(true);
-            }}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setDragActive(true);
-            }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragActive(false);
-              }
-            }}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
-            className={[
-              "group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-all duration-200",
-              dragActive
-                ? "border-[#0B6ED0] bg-[#0B6ED0]/10 shadow-[0_0_40px_-8px_rgba(11,110,208,0.45)]"
-                : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50",
-            ].join(" ")}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".txt,.srt,text/plain"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files;
-                if (f?.length) handleFiles(f);
-                e.target.value = "";
-              }}
-            />
-            <p className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
-              Drag and drop{" "}
-              <span className="text-[#0B6ED0]">.txt</span> or{" "}
-              <span className="text-[#0B6ED0]">.srt</span>
-            </p>
-            <p className="mt-2 text-xs text-zinc-500 transition-colors group-hover:text-zinc-400">
-              or click to browse — release to upload
-            </p>
+          <div className="flex justify-center">
+            <div className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900/60 p-1 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setInputMode("upload")}
+                className={[
+                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  inputMode === "upload"
+                    ? "bg-[#0B6ED0] text-white"
+                    : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                ].join(" ")}
+                aria-pressed={inputMode === "upload"}
+              >
+                File Upload
+              </button>
+              <button
+                type="button"
+                onClick={() => setInputMode("paste")}
+                className={[
+                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  inputMode === "paste"
+                    ? "bg-[#0B6ED0] text-white"
+                    : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                ].join(" ")}
+                aria-pressed={inputMode === "paste"}
+              >
+                Paste Text
+              </button>
+            </div>
           </div>
 
-          {fileName && (
-            <p className="text-center text-xs text-zinc-500">
-              Last file:{" "}
-              <span className="font-mono text-zinc-400">{fileName}</span>
-            </p>
+          {inputMode === "upload" ? (
+            <>
+              <div
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    inputRef.current?.click();
+                  }
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragActive(true);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDragActive(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragActive(false);
+                  }
+                }}
+                onDrop={onDrop}
+                onClick={() => inputRef.current?.click()}
+                className={[
+                  "group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-all duration-200",
+                  dragActive
+                    ? "border-[#0B6ED0] bg-[#0B6ED0]/10 shadow-[0_0_40px_-8px_rgba(11,110,208,0.45)]"
+                    : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50",
+                ].join(" ")}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".txt,.srt,text/plain"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files;
+                    if (f?.length) handleFiles(f);
+                    e.target.value = "";
+                  }}
+                />
+                <p className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
+                  Drag and drop{" "}
+                  <span className="text-[#0B6ED0]">.txt</span> or{" "}
+                  <span className="text-[#0B6ED0]">.srt</span>
+                </p>
+                <p className="mt-2 text-xs text-zinc-500 transition-colors group-hover:text-zinc-400">
+                  or click to browse — release to upload
+                </p>
+              </div>
+
+              {fileName && (
+                <p className="text-center text-xs text-zinc-500">
+                  Last file:{" "}
+                  <span className="font-mono text-zinc-400">{fileName}</span>
+                </p>
+              )}
+            </>
+          ) : (
+            <textarea
+              value={pastedText}
+              onChange={(e) => setPastedText(e.target.value)}
+              rows={12}
+              placeholder="Paste your sermon transcript here..."
+              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
+            />
           )}
+
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={status === "loading"}
+              className="inline-flex items-center justify-center rounded-full bg-[#0B6ED0] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#3d8fe8] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {status === "loading" ? "Generating..." : "Generate"}
+            </button>
+          </div>
 
           {status === "loading" && (
             <div
