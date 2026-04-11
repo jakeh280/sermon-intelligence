@@ -116,15 +116,13 @@ export async function POST(req: Request) {
   if (!clips) {
     return new Response(
       JSON.stringify({
-        error: `Invalid clipMinSec / clipMaxSec. Use integers with ${CLIP_MIN_ALLOWED} ≤ min ≤ max ≤ ${CLIP_MAX_ALLOWED}.`,
+        error: "Invalid clip settings.",
       }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
+      { status: 400 },
     );
   }
 
+  // RESTORED: Using the original model and text-only content block
   const result = streamText({
     model: google("gemini-3-flash-preview"),
     system: buildSystemPrompt(clips.min, clips.max),

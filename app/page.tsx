@@ -1009,13 +1009,15 @@ export default function Home() {
         </header>
 
         <section className="flex flex-col gap-6">
-          {limitNotice && (
+        {limitNotice && (
             <div
               className="rounded-xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-center backdrop-blur-sm"
               role="status"
             >
               <p className="text-sm leading-relaxed text-amber-100/95">
-                {AI_LIMIT_NOTICE}
+                {inputMode === "youtube"
+                  ? "The YouTube processing limit for the day has been reached. Please download the transcript from YouTube and upload it as a .txt file instead—it uses a different, much larger limit!"
+                  : AI_LIMIT_NOTICE}
               </p>
             </div>
           )}
@@ -1051,18 +1053,21 @@ export default function Home() {
                     Paste Text
                   </button>
                   <button
-                    type="button"
-                    onClick={() => setInputMode("youtube")}
-                    className={[
-                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
-                      inputMode === "youtube"
-                        ? "bg-[#0B6ED0] text-white"
-                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
-                    ].join(" ")}
-                    aria-pressed={inputMode === "youtube"}
-                  >
-                    YouTube link
-                  </button>
+  type="button"
+  disabled 
+  // Comment out or remove the onClick so the state physically cannot change
+  // onClick={() => setInputMode("youtube")} 
+  className={[
+    // Added 'pointer-events-none' to completely kill mouse interactions
+    "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 cursor-not-allowed opacity-50 pointer-events-none", 
+    inputMode === "youtube"
+      ? "bg-[#0B6ED0] text-white"
+      : "bg-transparent text-zinc-400",
+  ].join(" ")}
+  aria-pressed={inputMode === "youtube"}
+>
+  YouTube link (Under Review)
+</button>
                 </div>
               </div>
 
