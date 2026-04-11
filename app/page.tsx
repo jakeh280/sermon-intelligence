@@ -9,9 +9,8 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { extractYouTubeVideoId } from "@/lib/youtube";
 import type { ComponentProps, CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -651,21 +650,11 @@ function PromoCard() {
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [inputMode, setInputMode] = useState<"upload" | "paste" | "youtube">(
-    "upload",
-  );
+  const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadedText, setUploadedText] = useState("");
   const [pastedText, setPastedText] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [youtubePreviewLoading, setYoutubePreviewLoading] = useState(false);
-  const [youtubePreviewTitle, setYoutubePreviewTitle] = useState<string | null>(
-    null,
-  );
-  const [youtubePreviewError, setYoutubePreviewError] = useState<string | null>(
-    null,
-  );
   const [clipMinSec, setClipMinSec] = useState(15);
   const [clipMaxSec, setClipMaxSec] = useState(120);
   const [processingLabel, setProcessingLabel] = useState("");
@@ -676,61 +665,6 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
 
   const sections = useMemo(() => parseBentoSections(output), [output]);
-
-  useEffect(() => {
-    if (inputMode !== "youtube") {
-      setYoutubePreviewLoading(false);
-      setYoutubePreviewTitle(null);
-      setYoutubePreviewError(null);
-      return;
-    }
-    const url = youtubeUrl.trim();
-    const id = extractYouTubeVideoId(url);
-    if (!url || !id) {
-      setYoutubePreviewTitle(null);
-      setYoutubePreviewError(null);
-      setYoutubePreviewLoading(false);
-      return;
-    }
-
-    setYoutubePreviewLoading(true);
-    setYoutubePreviewError(null);
-    setYoutubePreviewTitle(null);
-
-    const ac = new AbortController();
-    const t = window.setTimeout(async () => {
-      try {
-        const res = await fetch("/api/youtube-preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-          signal: ac.signal,
-        });
-        const data = (await res.json()) as { error?: string; title?: string };
-        if (!res.ok) {
-          throw new Error(data.error || "Could not load video.");
-        }
-        const title =
-          typeof data.title === "string" && data.title.trim()
-            ? data.title.trim()
-            : null;
-        setYoutubePreviewTitle(title);
-      } catch (e) {
-        if (ac.signal.aborted) return;
-        setYoutubePreviewTitle(null);
-        setYoutubePreviewError(
-          e instanceof Error ? e.message : "Could not load video.",
-        );
-      } finally {
-        if (!ac.signal.aborted) setYoutubePreviewLoading(false);
-      }
-    }, 450);
-
-    return () => {
-      window.clearTimeout(t);
-      ac.abort();
-    };
-  }, [youtubeUrl, inputMode]);
 
   const applyClipMin = useCallback((raw: number) => {
     const v = snapClipSec(raw);
@@ -881,57 +815,6 @@ export default function Home() {
     const minSec = clipMinSec;
     const maxSec = clipMaxSec;
 
-    if (inputMode === "youtube") {
-      const url = youtubeUrl.trim();
-      if (!url) {
-        setStatus("error");
-        setErrorMessage("Please paste a YouTube link.");
-        return;
-      }
-      setProcessingLabel("YouTube video");
-      setOutput("");
-      setErrorMessage(null);
-      setStatus("loading");
-      try {
-        const tr = await fetch("/api/youtube-transcript", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        const data = (await tr.json()) as { error?: string; title?: string; text?: string };
-        if (!tr.ok) {
-          if (isAiLimitHttpStatus(tr.status)) {
-            throw aiLimitError();
-          }
-          throw new Error(data.error || "Could not load YouTube captions.");
-        }
-        const transcript = typeof data.text === "string" ? data.text.trim() : "";
-        if (!transcript) {
-          throw new Error("No transcript text returned.");
-        }
-        const title =
-          typeof data.title === "string" && data.title.trim()
-            ? data.title.trim()
-            : "YouTube video";
-        setProcessingLabel(title);
-        await streamChatResponse(transcript, minSec, maxSec);
-        setLimitNotice(false);
-        setStatus("idle");
-      } catch (e) {
-        if (isAiLimitError(e)) {
-          setLimitNotice(true);
-          setErrorMessage(null);
-          setStatus("idle");
-          return;
-        }
-        setStatus("error");
-        setErrorMessage(
-          e instanceof Error ? e.message : "Something went wrong",
-        );
-      }
-      return;
-    }
-
     const text = inputMode === "paste" ? pastedText : uploadedText;
     const trimmed = text.trim();
     if (!trimmed) {
@@ -956,9 +839,7 @@ export default function Home() {
     pastedText,
     runWithText,
     status,
-    streamChatResponse,
     uploadedText,
-    youtubeUrl,
   ]);
 
   const showBento = output.length > 0 || status === "loading";
@@ -1009,15 +890,13 @@ export default function Home() {
         </header>
 
         <section className="flex flex-col gap-6">
-        {limitNotice && (
+          {limitNotice && (
             <div
               className="rounded-xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-center backdrop-blur-sm"
               role="status"
             >
               <p className="text-sm leading-relaxed text-amber-100/95">
-                {inputMode === "youtube"
-                  ? "The YouTube processing limit for the day has been reached. Please download the transcript from YouTube and upload it as a .txt file instead—it uses a different, much larger limit!"
-                  : AI_LIMIT_NOTICE}
+                {AI_LIMIT_NOTICE}
               </p>
             </div>
           )}
@@ -1052,22 +931,6 @@ export default function Home() {
                   >
                     Paste Text
                   </button>
-                  <button
-  type="button"
-  disabled 
-  // Comment out or remove the onClick so the state physically cannot change
-  // onClick={() => setInputMode("youtube")} 
-  className={[
-    // Added 'pointer-events-none' to completely kill mouse interactions
-    "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4 cursor-not-allowed opacity-50 pointer-events-none", 
-    inputMode === "youtube"
-      ? "bg-[#0B6ED0] text-white"
-      : "bg-transparent text-zinc-400",
-  ].join(" ")}
-  aria-pressed={inputMode === "youtube"}
->
-  YouTube link (Under Review)
-</button>
                 </div>
               </div>
 
@@ -1136,7 +999,7 @@ export default function Home() {
                     </p>
                   )}
                 </>
-              ) : inputMode === "paste" ? (
+              ) : (
                 <textarea
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
@@ -1144,41 +1007,6 @@ export default function Home() {
                   placeholder="Paste your sermon transcript here..."
                   className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
                 />
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    type="url"
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=…"
-                    className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
-                    autoComplete="off"
-                  />
-                  {youtubeUrl.trim() &&
-                    extractYouTubeVideoId(youtubeUrl.trim()) && (
-                      <div className="flex min-h-[1.25rem] items-start gap-2 px-1">
-                        {youtubePreviewLoading ? (
-                          <>
-                            <Loader2
-                              className="mt-0.5 size-3.5 shrink-0 animate-spin text-[#0B6ED0]"
-                              aria-hidden
-                            />
-                            <span className="text-xs text-zinc-400">
-                              Finding video…
-                            </span>
-                          </>
-                        ) : youtubePreviewTitle ? (
-                          <strong className="text-sm font-semibold leading-snug text-white">
-                            {youtubePreviewTitle}
-                          </strong>
-                        ) : youtubePreviewError ? (
-                          <span className="text-xs text-red-300/90">
-                            {youtubePreviewError}
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                </div>
               )}
 
               <div className="space-y-4 rounded-2xl border border-zinc-800/90 bg-zinc-900/40 px-5 py-5 backdrop-blur-md">
