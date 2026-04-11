@@ -3,7 +3,17 @@ import { streamText } from "ai";
 
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are an expert church media director and YouTube strategist. Your task is to analyze a sermon transcript and provide high-quality, non-clickbaity metadata and clip suggestions.
+const CLIP_MIN_ALLOWED = 15;
+const CLIP_MAX_ALLOWED = 600;
+const CLIP_STEP = 5;
+
+function snapClipSec(n: number): number {
+  const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
+  return Math.min(CLIP_MAX_ALLOWED, Math.max(CLIP_MIN_ALLOWED, r));
+}
+
+function buildSystemPrompt(clipMinSec: number, clipMaxSec: number) {
+  return `You are an expert church media director and YouTube strategist. Your task is to analyze a sermon transcript and provide high-quality, non-clickbaity metadata and clip suggestions.
 
 CRITICAL RULES:
 
@@ -36,28 +46,42 @@ Write a 3-sentence description summarizing the core message. Don't break the fou
 
 YouTube Chapters (exclude entirely if uploaded transcript contains no timestamps)
 Provide chronological chapters. Format if transcript is over an hour: hh:mm:ss Chapter Title. Format if transcript is <1 hour: mm:ss Chapter Title.
+CRITICAL: The very first chapter in the list MUST start with the timestamp, regardless of the intro length.
 
-Short-Form Clips (Strictly 15 to 75 seconds)
-Provide 3 options. Strictly obey the 75-second maximum duration. Order these from highest favorable percentage to lowest favorable percentage.
-Option 1
-Favorable Percentage: [Give a percentage, e.g., 96%]
-Timestamps: [start - end]
-Duration: [X seconds]
-Title: [Suggested Title]
-Description: [1-sentence summary]
-Why it works: [1-sentence reasoning for social media engagement]
-(Repeat for Options 2 and 3)
+### Clips
+Provide exactly 3 clip options. Each clip's duration from start to end MUST be at least ${clipMinSec} seconds and at most ${clipMaxSec} seconds. Strictly obey these bounds. Order options from highest favorable percentage to lowest.
 
-Long-Form Clips (Strictly 3 to 8 minutes)
-Provide 3 options. These should be order from highest favorable percentage to lowest.
+For EACH option use this exact label pattern (one line per label, no bullets). Put a blank line between options.
+
 Option 1
-Favorable Percentage: [Give a percentage, e.g., 88%]
+Favorable Percentage: [e.g. 96%]
 Timestamps: [start - end]
-Duration: [X minutes, Y seconds]
+Duration: [must fall within the allowed range]
 Title: [Suggested Title]
-Description: [1-sentence summary]
-Why it works: [1-sentence reasoning for sharing as a standalone resource]
-(Repeat for Options 2 and 3)`;
+Transcript: [Verbatim excerpt from the sermon for this clip, 1 to 3 sentences — this will display as a quoted pull-quote]
+Description: [1-sentence summary of the moment]
+Why it works: [1-sentence reasoning for why this clip works as a standalone share]
+
+Option 2
+(same fields)
+
+Option 3
+(same fields)`;
+}
+
+function parseClipBounds(body: unknown): { min: number; max: number } | null {
+  if (typeof body !== "object" || body === null) return null;
+  const o = body as Record<string, unknown>;
+  const minRaw = o.clipMinSec;
+  const maxRaw = o.clipMaxSec;
+  if (typeof minRaw !== "number" || typeof maxRaw !== "number") return null;
+  if (!Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) return null;
+  const min = snapClipSec(minRaw);
+  const max = snapClipSec(maxRaw);
+  if (min < CLIP_MIN_ALLOWED || max > CLIP_MAX_ALLOWED) return null;
+  if (min > max) return null;
+  return { min, max };
+}
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -88,9 +112,22 @@ export async function POST(req: Request) {
     );
   }
 
+  const clips = parseClipBounds(body);
+  if (!clips) {
+    return new Response(
+      JSON.stringify({
+        error: `Invalid clipMinSec / clipMaxSec. Use integers with ${CLIP_MIN_ALLOWED} ≤ min ≤ max ≤ ${CLIP_MAX_ALLOWED}.`,
+      }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
   const result = streamText({
     model: google("gemini-3-flash-preview"),
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(clips.min, clips.max),
     messages: [
       {
         role: "user",

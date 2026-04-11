@@ -6,15 +6,59 @@ import {
   CirclePlay,
   Copy,
   Info,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import type { ComponentProps } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { extractYouTubeVideoId } from "@/lib/youtube";
+import type { ComponentProps, CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const ACCENT = "#0B6ED0";
 const ACCEPTED = new Set([".txt", ".srt"]);
+
+const COMMUNITY_DISCLAIMER =
+  "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone. Please try again shortly if it pauses.";
+
+const AI_LIMIT_NOTICE =
+  "We have hit our free limit for the hour. Please try again in a few minutes.";
+
+function isAiLimitHttpStatus(status: number) {
+  return status === 429 || status === 504;
+}
+
+function aiLimitError(): Error & { isAiLimit: true } {
+  const err = new Error(AI_LIMIT_NOTICE) as Error & { isAiLimit: true };
+  err.isAiLimit = true;
+  return err;
+}
+
+function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "isAiLimit" in e &&
+    (e as { isAiLimit?: boolean }).isAiLimit === true
+  );
+}
+
+const CLIP_FLOOR_SEC = 15;
+const CLIP_CEIL_SEC = 600;
+const CLIP_STEP = 5;
+
+function snapClipSec(n: number): number {
+  const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
+  return Math.min(CLIP_CEIL_SEC, Math.max(CLIP_FLOOR_SEC, r));
+}
+
+function formatDurationSec(totalSec: number): string {
+  const s = Math.max(0, Math.round(totalSec));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r === 0 ? `${m}m` : `${m}m ${r}s`;
+}
 
 function extension(name: string) {
   const i = name.lastIndexOf(".");
@@ -49,6 +93,115 @@ function parseBentoSections(markdown: string): BentoSection[] {
   }
 
   return sections;
+}
+
+const CLIP_FIELD_LABELS = [
+  "Favorable Percentage",
+  "Timestamps",
+  "Duration",
+  "Title",
+  "Transcript",
+  "Description",
+  "Why it works",
+] as const;
+
+type ClipFieldKey = (typeof CLIP_FIELD_LABELS)[number];
+
+type ParsedClip = Partial<Record<ClipFieldKey, string>> & {
+  optionLabel: string;
+};
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Parse labeled lines in an option block; values may span lines until the next known label. */
+function parseClipFieldLines(block: string): Partial<Record<ClipFieldKey, string>> {
+  const lines = block.split("\n");
+  const out: Partial<Record<ClipFieldKey, string>> = {};
+  let current: ClipFieldKey | null = null;
+
+  const flush = (buf: string[]) => {
+    const text = buf.join(" ").replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
+    if (current && text) out[current] = text;
+  };
+
+  let buf: string[] = [];
+  for (const line of lines) {
+    let matchedKey: ClipFieldKey | null = null;
+    let valuePart = "";
+    for (const k of CLIP_FIELD_LABELS) {
+      const starred = new RegExp(
+        `^\\s*\\*\\*${escapeRegExp(k)}\\*\\*\\s*:\\s*(.*)$`,
+        "i",
+      );
+      const plain = new RegExp(
+        `^\\s*${escapeRegExp(k)}\\s*:\\s*(.*)$`,
+        "i",
+      );
+      const m = line.match(starred) ?? line.match(plain);
+      if (m) {
+        matchedKey = k;
+        valuePart = m[1]?.trim() ?? "";
+        break;
+      }
+    }
+    if (matchedKey) {
+      flush(buf);
+      current = matchedKey;
+      buf = valuePart ? [valuePart] : [];
+    } else if (current && line.trim()) {
+      buf.push(line.trim());
+    }
+  }
+  flush(buf);
+  return out;
+}
+
+function splitClipOptionBlocks(body: string): { preamble: string; blocks: string[] } {
+  const lines = body.split("\n");
+  const preamble: string[] = [];
+  const blocks: string[] = [];
+  let current: string[] | null = null;
+
+  for (const line of lines) {
+    if (/^Option\s+[123]\s*$/i.test(line.trim())) {
+      if (current) blocks.push(current.join("\n"));
+      current = [line];
+    } else if (current) {
+      current.push(line);
+    } else {
+      preamble.push(line);
+    }
+  }
+  if (current) blocks.push(current.join("\n"));
+
+  return {
+    preamble: preamble.join("\n").trim(),
+    blocks,
+  };
+}
+
+function parseClipOptions(body: string): {
+  preamble: string;
+  clips: ParsedClip[];
+} {
+  const { preamble, blocks } = splitClipOptionBlocks(body);
+  const clips: ParsedClip[] = [];
+  for (const block of blocks) {
+    const firstLine = block.split("\n")[0]?.trim() ?? "Option";
+    const rest = block.split("\n").slice(1).join("\n");
+    const fields = parseClipFieldLines(rest);
+    clips.push({
+      optionLabel: firstLine,
+      ...fields,
+    });
+  }
+  return { preamble, clips };
+}
+
+function isClipsSectionTitle(title: string) {
+  return /^clips\b/i.test(title.trim());
 }
 
 const markdownComponents: NonNullable<
@@ -189,11 +342,24 @@ function BentoCard({
   body: string;
   streaming: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!body) return;
+    try {
+      await navigator.clipboard.writeText(body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
   return (
     <article
       className="flex min-h-[8rem] flex-col rounded-xl border border-zinc-800/90 bg-zinc-900/50 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(11,110,208,0.15)]"
       style={{
-        boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.04), 0 8px 32px -12px rgba(0,0,0,0.5)",
+        boxShadow: "inset 0 1px 0_0_rgba(255,255,255,0.04), 0_8px_32px_-12px_rgba(0,0,0,0.5)",
       }}
     >
       <header className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-800/80 pb-3">
@@ -205,9 +371,25 @@ function BentoCard({
           />
           {title}
         </h2>
-        {streaming && !body && (
-          <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
-        )}
+        <div className="flex items-center gap-3">
+          {streaming && !body && (
+            <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
+          )}
+          {body && !streaming && (
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 rounded bg-zinc-800/50 px-2 py-1 text-[11px] font-medium text-zinc-400 transition-colors hover:bg-zinc-700/50 hover:text-white"
+              title="Copy section"
+            >
+              {copied ? (
+                <Check className="size-3 text-emerald-400" aria-hidden />
+              ) : (
+                <Copy className="size-3" aria-hidden />
+              )}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+        </div>
       </header>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
         {body ? (
@@ -218,6 +400,217 @@ function BentoCard({
           <p className="text-sm text-zinc-500">Waiting for content…</p>
         ) : null}
       </div>
+    </article>
+  );
+}
+
+function DualClipRangeSlider({
+  clipMinSec,
+  clipMaxSec,
+  onMinChange,
+  onMaxChange,
+}: {
+  clipMinSec: number;
+  clipMaxSec: number;
+  onMinChange: (v: number) => void;
+  onMaxChange: (v: number) => void;
+}) {
+  const [activeThumb, setActiveThumb] = useState<"min" | "max" | null>(null);
+  const span = CLIP_CEIL_SEC - CLIP_FLOOR_SEC;
+  const minPct = ((clipMinSec - CLIP_FLOOR_SEC) / span) * 100;
+  const maxPct = ((clipMaxSec - CLIP_FLOOR_SEC) / span) * 100;
+
+  const rangeThumbTw =
+    "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-950 [&::-webkit-slider-thumb]:bg-[#0B6ED0] [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-zinc-950 [&::-moz-range-thumb]:bg-[#0B6ED0] [&::-moz-range-thumb]:shadow-md";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 text-sm text-zinc-300">
+        <span className="font-medium tabular-nums text-[#7EB8F0]">
+          {formatDurationSec(clipMinSec)}
+        </span>
+        <span className="text-xs uppercase tracking-wider text-zinc-500">
+          Range
+        </span>
+        <span className="font-medium tabular-nums text-[#7EB8F0]">
+          {formatDurationSec(clipMaxSec)}
+        </span>
+      </div>
+      <div className="relative py-3">
+        <div
+          className="pointer-events-none absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-800"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#0B6ED0]/65"
+          style={{
+            left: `${minPct}%`,
+            width: `${Math.max(0, maxPct - minPct)}%`,
+          }}
+          aria-hidden
+        />
+        <input
+          type="range"
+          min={CLIP_FLOOR_SEC}
+          max={CLIP_CEIL_SEC}
+          step={CLIP_STEP}
+          value={clipMinSec}
+          aria-label="Minimum clip length"
+          onMouseDown={() => setActiveThumb("min")}
+          onMouseUp={() => setActiveThumb(null)}
+          onMouseLeave={() => setActiveThumb(null)}
+          onTouchStart={() => setActiveThumb("min")}
+          onTouchEnd={() => setActiveThumb(null)}
+          onChange={(e) => onMinChange(Number(e.target.value))}
+          className={[
+            "absolute inset-x-0 top-1/2 h-3 w-full -translate-y-1/2 appearance-none bg-transparent",
+            "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
+            rangeThumbTw,
+            activeThumb === "min" ? "z-30" : "z-20",
+          ].join(" ")}
+          style={{ WebkitAppearance: "none" } as CSSProperties}
+        />
+        <input
+          type="range"
+          min={CLIP_FLOOR_SEC}
+          max={CLIP_CEIL_SEC}
+          step={CLIP_STEP}
+          value={clipMaxSec}
+          aria-label="Maximum clip length"
+          onMouseDown={() => setActiveThumb("max")}
+          onMouseUp={() => setActiveThumb(null)}
+          onMouseLeave={() => setActiveThumb(null)}
+          onTouchStart={() => setActiveThumb("max")}
+          onTouchEnd={() => setActiveThumb(null)}
+          onChange={(e) => onMaxChange(Number(e.target.value))}
+          className={[
+            "absolute inset-x-0 top-1/2 h-3 w-full -translate-y-1/2 appearance-none bg-transparent",
+            "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
+            rangeThumbTw,
+            activeThumb === "max" ? "z-30" : "z-10",
+          ].join(" ")}
+          style={{ WebkitAppearance: "none" } as CSSProperties}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ClipsBentoCard({
+  title,
+  body,
+  streaming,
+}: {
+  title: string;
+  body: string;
+  streaming: boolean;
+}) {
+  const { preamble, clips } = useMemo(() => parseClipOptions(body), [body]);
+  const clipsLookStructured = clips.some(
+    (c) =>
+      Boolean(
+        c.Title ||
+          c.Timestamps ||
+          c.Transcript ||
+          c.Description ||
+          c.Duration ||
+          c["Favorable Percentage"],
+      ),
+  );
+  const showClipGrid = clips.length > 0 && clipsLookStructured;
+
+  return (
+    <article
+      className="col-span-1 flex min-h-[8rem] flex-col rounded-xl border border-zinc-800/90 bg-zinc-900/50 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(11,110,208,0.15)] md:col-span-2 xl:col-span-3"
+      style={{
+        boxShadow:
+          "inset 0 1px 0 0 rgba(255,255,255,0.04), 0 8px 32px -12px rgba(0,0,0,0.5)",
+      }}
+    >
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800/80 pb-4">
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
+          <span
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle"
+            style={{ backgroundColor: ACCENT }}
+            aria-hidden
+          />
+          {title}
+        </h2>
+        {streaming && !body && (
+          <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
+        )}
+      </header>
+
+      {preamble ? (
+        <p className="mb-4 text-sm text-zinc-400">{preamble}</p>
+      ) : null}
+
+      {showClipGrid ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {clips.map((clip, i) => (
+            <div
+              key={`${clip.optionLabel}-${i}`}
+              className="flex flex-col rounded-lg border border-zinc-700/90 bg-zinc-950/40 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+            >
+              <div className="mb-3 flex flex-col gap-2 border-b border-zinc-800/90 pb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {clip["Favorable Percentage"] ? (
+                    <span className="rounded-md bg-[#0B6ED0]/15 px-2 py-0.5 text-xs font-semibold text-[#7EB8F0]">
+                      {clip["Favorable Percentage"]}
+                    </span>
+                  ) : null}
+                  {clip.Duration ? (
+                    <span className="text-xs font-medium tabular-nums tracking-wide text-zinc-500">
+                      {clip.Duration}
+                    </span>
+                  ) : null}
+                </div>
+                {clip.Timestamps ? (
+                  <p className="font-mono text-xs font-semibold tracking-tight text-[#5A9FE8]">
+                    {clip.Timestamps}
+                  </p>
+                ) : null}
+                {clip.Title ? (
+                  <h3 className="text-base font-semibold leading-snug text-white">
+                    {clip.Title}
+                  </h3>
+                ) : null}
+              </div>
+              {clip.Transcript ? (
+                <blockquote className="mb-3 grow border-l-2 border-[#0B6ED0]/45 pl-3 text-sm italic leading-relaxed text-zinc-400">
+                  {clip.Transcript}
+                </blockquote>
+              ) : null}
+              {clip.Description ? (
+                <p className="mb-2 text-sm leading-relaxed text-zinc-300">
+                  {clip.Description}
+                </p>
+              ) : null}
+              {clip["Why it works"] ? (
+                <p className="mt-auto text-xs leading-relaxed text-zinc-500">
+                  <span className="font-medium text-zinc-400">
+                    Why it works:{" "}
+                  </span>
+                  {clip["Why it works"]}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
+          {body ? (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents}
+            >
+              {body}
+            </ReactMarkdown>
+          ) : streaming ? (
+            <p className="text-sm text-zinc-500">Waiting for content…</p>
+          ) : null}
+        </div>
+      )}
     </article>
   );
 }
@@ -258,32 +651,115 @@ function PromoCard() {
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
+  const [inputMode, setInputMode] = useState<"upload" | "paste" | "youtube">(
+    "upload",
+  );
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploadedText, setUploadedText] = useState("");
   const [pastedText, setPastedText] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [youtubePreviewLoading, setYoutubePreviewLoading] = useState(false);
+  const [youtubePreviewTitle, setYoutubePreviewTitle] = useState<string | null>(
+    null,
+  );
+  const [youtubePreviewError, setYoutubePreviewError] = useState<string | null>(
+    null,
+  );
+  const [clipMinSec, setClipMinSec] = useState(15);
+  const [clipMaxSec, setClipMaxSec] = useState(120);
+  const [processingLabel, setProcessingLabel] = useState("");
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [limitNotice, setLimitNotice] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const sections = useMemo(() => parseBentoSections(output), [output]);
 
-  const runWithText = useCallback(async (text: string, name: string | null) => {
-    setFileName(name);
-    setOutput("");
-    setErrorMessage(null);
-    setStatus("loading");
+  useEffect(() => {
+    if (inputMode !== "youtube") {
+      setYoutubePreviewLoading(false);
+      setYoutubePreviewTitle(null);
+      setYoutubePreviewError(null);
+      return;
+    }
+    const url = youtubeUrl.trim();
+    const id = extractYouTubeVideoId(url);
+    if (!url || !id) {
+      setYoutubePreviewTitle(null);
+      setYoutubePreviewError(null);
+      setYoutubePreviewLoading(false);
+      return;
+    }
 
-    try {
+    setYoutubePreviewLoading(true);
+    setYoutubePreviewError(null);
+    setYoutubePreviewTitle(null);
+
+    const ac = new AbortController();
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/youtube-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: ac.signal,
+        });
+        const data = (await res.json()) as { error?: string; title?: string };
+        if (!res.ok) {
+          throw new Error(data.error || "Could not load video.");
+        }
+        const title =
+          typeof data.title === "string" && data.title.trim()
+            ? data.title.trim()
+            : null;
+        setYoutubePreviewTitle(title);
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        setYoutubePreviewTitle(null);
+        setYoutubePreviewError(
+          e instanceof Error ? e.message : "Could not load video.",
+        );
+      } finally {
+        if (!ac.signal.aborted) setYoutubePreviewLoading(false);
+      }
+    }, 450);
+
+    return () => {
+      window.clearTimeout(t);
+      ac.abort();
+    };
+  }, [youtubeUrl, inputMode]);
+
+  const applyClipMin = useCallback((raw: number) => {
+    const v = snapClipSec(raw);
+    setClipMinSec(v);
+    setClipMaxSec((m) => (m < v ? v : m));
+  }, []);
+
+  const applyClipMax = useCallback((raw: number) => {
+    const v = snapClipSec(raw);
+    setClipMaxSec(v);
+    setClipMinSec((m) => (m > v ? v : m));
+  }, []);
+
+  const streamChatResponse = useCallback(
+    async (text: string, minSec: number, maxSec: number) => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          clipMinSec: minSec,
+          clipMaxSec: maxSec,
+        }),
       });
 
       if (!res.ok) {
+        if (isAiLimitHttpStatus(res.status)) {
+          throw aiLimitError();
+        }
         let detail = res.statusText;
         try {
           const err = (await res.json()) as { error?: string };
@@ -309,12 +785,42 @@ export default function Home() {
 
       accumulated += decoder.decode();
       setOutput(accumulated);
-      setStatus("idle");
-    } catch (e) {
-      setStatus("error");
-      setErrorMessage(e instanceof Error ? e.message : "Something went wrong");
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const runWithText = useCallback(
+    async (
+      text: string,
+      label: string,
+      minSec: number,
+      maxSec: number,
+    ) => {
+      setProcessingLabel(label);
+      setOutput("");
+      setErrorMessage(null);
+      setLimitNotice(false);
+      setStatus("loading");
+
+      try {
+        await streamChatResponse(text, minSec, maxSec);
+        setLimitNotice(false);
+        setStatus("idle");
+      } catch (e) {
+        if (isAiLimitError(e)) {
+          setLimitNotice(true);
+          setErrorMessage(null);
+          setStatus("idle");
+          return;
+        }
+        setStatus("error");
+        setErrorMessage(
+          e instanceof Error ? e.message : "Something went wrong",
+        );
+      }
+    },
+    [streamChatResponse],
+  );
 
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
@@ -343,7 +849,7 @@ export default function Home() {
       };
       reader.readAsText(file);
     },
-    [runWithText],
+    [],
   );
 
   const onDrop = useCallback(
@@ -367,8 +873,65 @@ export default function Home() {
     }
   }, [output]);
 
-  const handleGenerate = useCallback(() => {
+  const handleGenerate = useCallback(async () => {
     if (status === "loading") return;
+
+    setLimitNotice(false);
+
+    const minSec = clipMinSec;
+    const maxSec = clipMaxSec;
+
+    if (inputMode === "youtube") {
+      const url = youtubeUrl.trim();
+      if (!url) {
+        setStatus("error");
+        setErrorMessage("Please paste a YouTube link.");
+        return;
+      }
+      setProcessingLabel("YouTube video");
+      setOutput("");
+      setErrorMessage(null);
+      setStatus("loading");
+      try {
+        const tr = await fetch("/api/youtube-transcript", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = (await tr.json()) as { error?: string; title?: string; text?: string };
+        if (!tr.ok) {
+          if (isAiLimitHttpStatus(tr.status)) {
+            throw aiLimitError();
+          }
+          throw new Error(data.error || "Could not load YouTube captions.");
+        }
+        const transcript = typeof data.text === "string" ? data.text.trim() : "";
+        if (!transcript) {
+          throw new Error("No transcript text returned.");
+        }
+        const title =
+          typeof data.title === "string" && data.title.trim()
+            ? data.title.trim()
+            : "YouTube video";
+        setProcessingLabel(title);
+        await streamChatResponse(transcript, minSec, maxSec);
+        setLimitNotice(false);
+        setStatus("idle");
+      } catch (e) {
+        if (isAiLimitError(e)) {
+          setLimitNotice(true);
+          setErrorMessage(null);
+          setStatus("idle");
+          return;
+        }
+        setStatus("error");
+        setErrorMessage(
+          e instanceof Error ? e.message : "Something went wrong",
+        );
+      }
+      return;
+    }
+
     const text = inputMode === "paste" ? pastedText : uploadedText;
     const trimmed = text.trim();
     if (!trimmed) {
@@ -380,8 +943,23 @@ export default function Home() {
       );
       return;
     }
-    void runWithText(trimmed, inputMode === "upload" ? fileName : "Pasted text");
-  }, [fileName, inputMode, pastedText, runWithText, status, uploadedText]);
+    const label =
+      inputMode === "upload"
+        ? fileName ?? "file"
+        : "text input";
+    void runWithText(trimmed, label, minSec, maxSec);
+  }, [
+    clipMaxSec,
+    clipMinSec,
+    fileName,
+    inputMode,
+    pastedText,
+    runWithText,
+    status,
+    streamChatResponse,
+    uploadedText,
+    youtubeUrl,
+  ]);
 
   const showBento = output.length > 0 || status === "loading";
   const streaming = status === "loading";
@@ -431,136 +1009,219 @@ export default function Home() {
         </header>
 
         <section className="flex flex-col gap-6">
-          <div className="flex justify-center">
-            <div className="inline-flex items-center rounded-full border border-zinc-800 bg-zinc-900/60 p-1 backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => setInputMode("upload")}
-                className={[
-                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                  inputMode === "upload"
-                    ? "bg-[#0B6ED0] text-white"
-                    : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
-                ].join(" ")}
-                aria-pressed={inputMode === "upload"}
-              >
-                File Upload
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode("paste")}
-                className={[
-                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                  inputMode === "paste"
-                    ? "bg-[#0B6ED0] text-white"
-                    : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
-                ].join(" ")}
-                aria-pressed={inputMode === "paste"}
-              >
-                Paste Text
-              </button>
+          {limitNotice && (
+            <div
+              className="rounded-xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-center backdrop-blur-sm"
+              role="status"
+            >
+              <p className="text-sm leading-relaxed text-amber-100/95">
+                {AI_LIMIT_NOTICE}
+              </p>
             </div>
-          </div>
-
-          {inputMode === "upload" ? (
-            <>
-              <div
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    inputRef.current?.click();
-                  }
-                }}
-                onDragEnter={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDragActive(true);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setDragActive(true);
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                    setDragActive(false);
-                  }
-                }}
-                onDrop={onDrop}
-                onClick={() => inputRef.current?.click()}
-                className={[
-                  "group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-all duration-200",
-                  dragActive
-                    ? "border-[#0B6ED0] bg-[#0B6ED0]/10 shadow-[0_0_40px_-8px_rgba(11,110,208,0.45)]"
-                    : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50",
-                ].join(" ")}
-              >
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".txt,.srt,text/plain"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const f = e.target.files;
-                    if (f?.length) handleFiles(f);
-                    e.target.value = "";
-                  }}
-                />
-                <p className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
-                  Drag and drop{" "}
-                  <span className="text-[#0B6ED0]">.txt</span> or{" "}
-                  <span className="text-[#0B6ED0]">.srt</span>
-                </p>
-                <p className="mt-2 text-xs text-zinc-500 transition-colors group-hover:text-zinc-400">
-                  or click to browse — release to upload
-                </p>
-              </div>
-
-              {fileName && (
-                <p className="text-center text-xs text-zinc-500">
-                  Last file:{" "}
-                  <span className="font-mono text-zinc-400">{fileName}</span>
-                </p>
-              )}
-            </>
-          ) : (
-            <textarea
-              value={pastedText}
-              onChange={(e) => setPastedText(e.target.value)}
-              rows={12}
-              placeholder="Paste your sermon transcript here..."
-              className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
-            />
           )}
 
-          <div className="flex justify-center">
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={status === "loading"}
-              className="inline-flex items-center justify-center rounded-full bg-[#0B6ED0] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#3d8fe8] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {status === "loading" ? "Generating..." : "Generate"}
-            </button>
-          </div>
+          {status !== "loading" && (
+            <>
+              <div className="flex justify-center">
+                <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-zinc-800 bg-zinc-900/60 p-1 backdrop-blur-md">
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("upload")}
+                    className={[
+                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                      inputMode === "upload"
+                        ? "bg-[#0B6ED0] text-white"
+                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                    ].join(" ")}
+                    aria-pressed={inputMode === "upload"}
+                  >
+                    File Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("paste")}
+                    className={[
+                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                      inputMode === "paste"
+                        ? "bg-[#0B6ED0] text-white"
+                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                    ].join(" ")}
+                    aria-pressed={inputMode === "paste"}
+                  >
+                    Paste Text
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputMode("youtube")}
+                    className={[
+                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                      inputMode === "youtube"
+                        ? "bg-[#0B6ED0] text-white"
+                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                    ].join(" ")}
+                    aria-pressed={inputMode === "youtube"}
+                  >
+                    YouTube link
+                  </button>
+                </div>
+              </div>
+
+              {inputMode === "upload" ? (
+                <>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        inputRef.current?.click();
+                      }
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragActive(true);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragActive(false);
+                      }
+                    }}
+                    onDrop={onDrop}
+                    onClick={() => inputRef.current?.click()}
+                    className={[
+                      "group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-all duration-200",
+                      dragActive
+                        ? "border-[#0B6ED0] bg-[#0B6ED0]/10 shadow-[0_0_40px_-8px_rgba(11,110,208,0.45)]"
+                        : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50",
+                    ].join(" ")}
+                  >
+                    <input
+                      ref={inputRef}
+                      type="file"
+                      accept=".txt,.srt,text/plain"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files;
+                        if (f?.length) handleFiles(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <p className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
+                      Drag and drop{" "}
+                      <span className="text-[#0B6ED0]">.txt</span> or{" "}
+                      <span className="text-[#0B6ED0]">.srt</span>
+                    </p>
+                    <p className="mt-2 text-xs text-zinc-500 transition-colors group-hover:text-zinc-400">
+                      or click to browse — release to upload
+                    </p>
+                  </div>
+
+                  {fileName && (
+                    <p className="text-center text-xs text-zinc-500">
+                      Last file:{" "}
+                      <span className="font-mono text-zinc-400">{fileName}</span>
+                    </p>
+                  )}
+                </>
+              ) : inputMode === "paste" ? (
+                <textarea
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  rows={12}
+                  placeholder="Paste your sermon transcript here..."
+                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
+                />
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=…"
+                    className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
+                    autoComplete="off"
+                  />
+                  {youtubeUrl.trim() &&
+                    extractYouTubeVideoId(youtubeUrl.trim()) && (
+                      <div className="flex min-h-[1.25rem] items-start gap-2 px-1">
+                        {youtubePreviewLoading ? (
+                          <>
+                            <Loader2
+                              className="mt-0.5 size-3.5 shrink-0 animate-spin text-[#0B6ED0]"
+                              aria-hidden
+                            />
+                            <span className="text-xs text-zinc-400">
+                              Finding video…
+                            </span>
+                          </>
+                        ) : youtubePreviewTitle ? (
+                          <strong className="text-sm font-semibold leading-snug text-white">
+                            {youtubePreviewTitle}
+                          </strong>
+                        ) : youtubePreviewError ? (
+                          <span className="text-xs text-red-300/90">
+                            {youtubePreviewError}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                </div>
+              )}
+
+              <div className="space-y-4 rounded-2xl border border-zinc-800/90 bg-zinc-900/40 px-5 py-5 backdrop-blur-md">
+                <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                  Clip length
+                </p>
+                <DualClipRangeSlider
+                  clipMinSec={clipMinSec}
+                  clipMaxSec={clipMaxSec}
+                  onMinChange={applyClipMin}
+                  onMaxChange={applyClipMax}
+                />
+              </div>
+
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleGenerate()}
+                  className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[#0B6ED0] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#3d8fe8]"
+                >
+                  Generate
+                </button>
+                <p className="max-w-md text-center text-xs leading-relaxed text-zinc-500">
+                  {COMMUNITY_DISCLAIMER}
+                </p>
+              </div>
+            </>
+          )}
 
           {status === "loading" && (
             <div
-              className="flex items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-4 backdrop-blur-md"
+              className="flex flex-col items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-5 text-center backdrop-blur-md"
               aria-live="polite"
               aria-busy="true"
             >
-              <span
-                className="size-5 shrink-0 animate-spin rounded-full border-2 border-zinc-600 border-t-[#0B6ED0]"
-                aria-hidden
-              />
-              <span className="text-sm text-zinc-300">
-                Streaming markdown from the model…
-              </span>
+              <p className="text-sm font-medium text-zinc-200">
+                Processing:{" "}
+                <span className="text-[#7EB8F0]">{processingLabel}</span>
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <span
+                  className="size-5 shrink-0 animate-spin rounded-full border-2 border-zinc-600 border-t-[#0B6ED0]"
+                  aria-hidden
+                />
+                <span className="text-sm text-zinc-400">
+                  Streaming markdown from the model…
+                </span>
+              </div>
             </div>
           )}
 
@@ -596,16 +1257,25 @@ export default function Home() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {sections.length > 0 ? (
-                  sections.map((s, i) => (
-                    <BentoCard
-                      key={`${s.title}-${i}`}
-                      title={s.title}
-                      body={s.body}
-                      streaming={
-                        streaming && i === sections.length - 1
-                      }
-                    />
-                  ))
+                  sections.map((s, i) =>
+                    isClipsSectionTitle(s.title) ? (
+                      <ClipsBentoCard
+                        key={`${s.title}-${i}`}
+                        title={s.title}
+                        body={s.body}
+                        streaming={streaming && i === sections.length - 1}
+                      />
+                    ) : (
+                      <BentoCard
+                        key={`${s.title}-${i}`}
+                        title={s.title}
+                        body={s.body}
+                        streaming={
+                          streaming && i === sections.length - 1
+                        }
+                      />
+                    ),
+                  )
                 ) : (
                   <div className="col-span-1 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 p-8 text-center text-sm text-zinc-500 backdrop-blur-sm md:col-span-2 xl:col-span-3">
                     Processing…
