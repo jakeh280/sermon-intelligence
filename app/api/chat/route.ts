@@ -1,7 +1,13 @@
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 
+// Explicitly configure the Google provider to ensure it uses the correct API key
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+});
+
+// Vercel Serverless (Node.js) runtime
 export const maxDuration = 60;
 
 const CLIP_MIN_ALLOWED = 15;
@@ -66,17 +72,30 @@ export async function POST(req: Request) {
     );
   }
 
-  // RESTORED: Using the original model and text-only content block
-  const result = streamText({
-    model: google("gemini-3-flash-preview"),
-    system: buildSystemPrompt(clips.min, clips.max),
-    messages: [
-      {
-        role: "user",
-        content: `Transcript or subtitle file content:\n\n${text}`,
-      },
-    ],
-  });
+  // Real AI Analysis with gemini-2.5-flash
+  try {
+    const result = streamText({
+      model: google("gemini-2.5-flash"),
+      system: buildSystemPrompt(clips.min, clips.max),
+      messages: [
+        {
+          role: "user",
+          content: `Transcript content:\n\n${text}`,
+        },
+      ],
+    });
 
-  return result.toTextStreamResponse();
+    return result.toTextStreamResponse();
+  } catch (err) {
+    console.error("AI_ROUTE_ERROR:", err);
+    return new Response(
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "AI connection failed. Please check your API key and quota.",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
 }

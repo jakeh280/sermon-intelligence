@@ -5,12 +5,15 @@ import {
   Check,
   CirclePlay,
   Copy,
+  History,
   Info,
   Loader2,
+  Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, CSSProperties } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -18,7 +21,7 @@ const ACCENT = "#0B6ED0";
 const ACCEPTED = new Set([".txt", ".srt"]);
 
 const COMMUNITY_DISCLAIMER =
-  "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone. Please try again shortly if it pauses.";
+  "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone.";
 
 const AI_LIMIT_NOTICE =
   "We have hit our free limit for the hour. Please try again in a few minutes.";
@@ -66,10 +69,6 @@ function extension(name: string) {
 
 type BentoSection = { title: string; body: string };
 
-/**
- * Split streamed markdown on `### ` headings so each major section becomes a bento card.
- * Handles preamble before the first ### and incomplete final sections while streaming.
- */
 function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
   const parts = trimmed.split(/^###\s+/m);
@@ -114,7 +113,6 @@ function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Parse labeled lines in an option block; values may span lines until the next known label. */
 function parseClipFieldLines(block: string): Partial<Record<ClipFieldKey, string>> {
   const lines = block.split("\n");
   const out: Partial<Record<ClipFieldKey, string>> = {};
@@ -356,15 +354,12 @@ function BentoCard({
 
   return (
     <article
-      className="flex min-h-[8rem] flex-col rounded-xl border border-zinc-800/90 bg-zinc-900/50 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(11,110,208,0.15)]"
-      style={{
-        boxShadow: "inset 0 1px 0_0_rgba(255,255,255,0.04), 0_8px_32px_-12px_rgba(0,0,0,0.5)",
-      }}
+      className="flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-5 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500"
     >
-      <header className="mb-3 flex items-start justify-between gap-3 border-b border-zinc-800/80 pb-3">
-        <h2 className="text-sm font-semibold tracking-tight text-white">
+      <header className="mb-3 flex items-start justify-between gap-3 border-b border-white/5 pb-3">
+        <h2 className="text-sm font-semibold tracking-tight text-white/90">
           <span
-            className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full align-middle"
+            className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full align-middle shadow-[0_0_8px_rgba(11,110,208,0.5)]"
             style={{ backgroundColor: ACCENT }}
             aria-hidden
           />
@@ -372,12 +367,12 @@ function BentoCard({
         </h2>
         <div className="flex items-center gap-3">
           {streaming && !body && (
-            <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
+            <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
           )}
           {body && !streaming && (
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded bg-zinc-800/50 px-2 py-1 text-[11px] font-medium text-zinc-400 transition-colors hover:bg-zinc-700/50 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
               title="Copy section"
             >
               {copied ? (
@@ -396,7 +391,10 @@ function BentoCard({
             {body}
           </ReactMarkdown>
         ) : streaming ? (
-          <p className="text-sm text-zinc-500">Waiting for content…</p>
+          <div className="space-y-2">
+            <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-white/5" />
+          </div>
         ) : null}
       </div>
     </article>
@@ -420,7 +418,7 @@ function DualClipRangeSlider({
   const maxPct = ((clipMaxSec - CLIP_FLOOR_SEC) / span) * 100;
 
   const rangeThumbTw =
-    "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-950 [&::-webkit-slider-thumb]:bg-[#0B6ED0] [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-zinc-950 [&::-moz-range-thumb]:bg-[#0B6ED0] [&::-moz-range-thumb]:shadow-md";
+    "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-950 [&::-webkit-slider-thumb]:bg-[#0B6ED0] [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-zinc-950 [&::-moz-range-thumb]:bg-[#0B6ED0] [&::-moz-range-thumb]:shadow-md";
 
   return (
     <div className="space-y-3">
@@ -428,8 +426,8 @@ function DualClipRangeSlider({
         <span className="font-medium tabular-nums text-[#7EB8F0]">
           {formatDurationSec(clipMinSec)}
         </span>
-        <span className="text-xs uppercase tracking-wider text-zinc-500">
-          Range
+        <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">
+          Clip Target Duration
         </span>
         <span className="font-medium tabular-nums text-[#7EB8F0]">
           {formatDurationSec(clipMaxSec)}
@@ -437,11 +435,11 @@ function DualClipRangeSlider({
       </div>
       <div className="relative py-3">
         <div
-          className="pointer-events-none absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-zinc-800"
+          className="pointer-events-none absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/5"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#0B6ED0]/65"
+          className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#0B6ED0]/80 shadow-[0_0_12px_rgba(11,110,208,0.4)]"
           style={{
             left: `${minPct}%`,
             width: `${Math.max(0, maxPct - minPct)}%`,
@@ -509,86 +507,82 @@ function ClipsBentoCard({
     (c) =>
       Boolean(
         c.Title ||
-          c.Timestamps ||
-          c.Transcript ||
-          c.Description ||
-          c.Duration ||
-          c["Favorable Percentage"],
+        c.Timestamps ||
+        c.Transcript ||
+        c.Description ||
+        c.Duration ||
+        c["Favorable Percentage"],
       ),
   );
   const showClipGrid = clips.length > 0 && clipsLookStructured;
 
   return (
     <article
-      className="col-span-1 flex min-h-[8rem] flex-col rounded-xl border border-zinc-800/90 bg-zinc-900/50 p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(11,110,208,0.15)] md:col-span-2 xl:col-span-3"
-      style={{
-        boxShadow:
-          "inset 0 1px 0 0 rgba(255,255,255,0.04), 0 8px 32px -12px rgba(0,0,0,0.5)",
-      }}
+      className="col-span-1 flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl md:col-span-2 xl:col-span-3 transition-all hover:border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-700"
     >
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800/80 pb-4">
-        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white/95 sm:text-2xl">
           <span
-            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full align-middle"
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_rgba(11,110,208,0.6)]"
             style={{ backgroundColor: ACCENT }}
             aria-hidden
           />
           {title}
         </h2>
         {streaming && !body && (
-          <span className="shrink-0 text-xs text-zinc-500">Typing…</span>
+          <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
         )}
       </header>
 
       {preamble ? (
-        <p className="mb-4 text-sm text-zinc-400">{preamble}</p>
+        <p className="mb-6 text-sm leading-relaxed text-zinc-400">{preamble}</p>
       ) : null}
 
       {showClipGrid ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           {clips.map((clip, i) => (
             <div
               key={`${clip.optionLabel}-${i}`}
-              className="flex flex-col rounded-lg border border-zinc-700/90 bg-zinc-950/40 p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+              className="flex flex-col rounded-xl border border-white/5 bg-black/20 p-5 transition-transform hover:scale-[1.02] hover:bg-black/30"
             >
-              <div className="mb-3 flex flex-col gap-2 border-b border-zinc-800/90 pb-3">
+              <div className="mb-3 flex flex-col gap-2 border-b border-white/5 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {clip["Favorable Percentage"] ? (
-                    <span className="rounded-md bg-[#0B6ED0]/15 px-2 py-0.5 text-xs font-semibold text-[#7EB8F0]">
-                      {clip["Favorable Percentage"]}
+                    <span className="rounded-md bg-[#0B6ED0]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#7EB8F0]">
+                      {clip["Favorable Percentage"]} Match
                     </span>
                   ) : null}
                   {clip.Duration ? (
-                    <span className="text-xs font-medium tabular-nums tracking-wide text-zinc-500">
+                    <span className="text-[10px] font-bold tabular-nums tracking-widest text-zinc-500">
                       {clip.Duration}
                     </span>
                   ) : null}
                 </div>
                 {clip.Timestamps ? (
-                  <p className="font-mono text-xs font-semibold tracking-tight text-[#5A9FE8]">
+                  <p className="font-mono text-xs font-semibold tracking-tighter text-[#5A9FE8]">
                     {clip.Timestamps}
                   </p>
                 ) : null}
                 {clip.Title ? (
-                  <h3 className="text-base font-semibold leading-snug text-white">
+                  <h3 className="text-base font-semibold leading-tight text-white/90">
                     {clip.Title}
                   </h3>
                 ) : null}
               </div>
               {clip.Transcript ? (
-                <blockquote className="mb-3 grow border-l-2 border-[#0B6ED0]/45 pl-3 text-sm italic leading-relaxed text-zinc-400">
+                <blockquote className="mb-4 grow border-l-2 border-[#0B6ED0]/30 pl-3 text-sm italic leading-relaxed text-zinc-400">
                   {clip.Transcript}
                 </blockquote>
               ) : null}
               {clip.Description ? (
-                <p className="mb-2 text-sm leading-relaxed text-zinc-300">
+                <p className="mb-3 text-sm leading-relaxed text-zinc-300">
                   {clip.Description}
                 </p>
               ) : null}
               {clip["Why it works"] ? (
-                <p className="mt-auto text-xs leading-relaxed text-zinc-500">
-                  <span className="font-medium text-zinc-400">
-                    Why it works:{" "}
+                <p className="mt-auto text-sm leading-relaxed text-zinc-500 italic">
+                  <span className="font-semibold text-zinc-400">
+                    Hook:{" "}
                   </span>
                   {clip["Why it works"]}
                 </p>
@@ -606,7 +600,10 @@ function ClipsBentoCard({
               {body}
             </ReactMarkdown>
           ) : streaming ? (
-            <p className="text-sm text-zinc-500">Waiting for content…</p>
+            <div className="flex flex-col gap-2">
+              <div className="h-4 w-full animate-pulse rounded bg-white/5" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-white/5" />
+            </div>
           ) : null}
         </div>
       )}
@@ -617,34 +614,120 @@ function ClipsBentoCard({
 function PromoCard() {
   return (
     <article
-      className="relative col-span-1 overflow-hidden rounded-xl border border-[#0B6ED0]/25 bg-gradient-to-br from-zinc-900/80 via-zinc-900/50 to-[#0B6ED0]/15 p-6 shadow-[0_0_60px_-20px_rgba(11,110,208,0.35)] backdrop-blur-md md:col-span-2 xl:col-span-3"
+      className="relative col-span-1 overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-[#0B6ED0]/10 p-6 shadow-2xl backdrop-blur-xl md:col-span-2 xl:col-span-3 transition-all hover:border-white/10 group"
     >
       <div
-        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-40 blur-3xl"
+        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-25 blur-3xl transition-transform group-hover:scale-125"
         style={{ backgroundColor: ACCENT }}
         aria-hidden
       />
       <div className="relative">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#7EB8F0]">
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#7EB8F0]/80">
           Overflow Creative
         </p>
-        <p className="mt-2 max-w-xl text-lg font-semibold tracking-tight text-white sm:text-xl">
-          Ready to build better church videos?
+        <p className="mt-2 max-w-xl text-lg font-bold tracking-tight text-white sm:text-2xl">
+          Elevate Your Church Video Production
         </p>
-        <p className="mt-2 text-sm text-zinc-400">
-          The complete course that contains everything I know about church video production.
+        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+          The complete masterclass for creators building the next generation of sermon content.
         </p>
         <Link
           href="https://overflowcreative.net/betterchurchvideo"
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-4 inline-flex items-center gap-2 rounded-lg px-0 text-sm font-medium text-[#0B6ED0] underline decoration-[#0B6ED0]/40 underline-offset-4 transition-colors hover:text-[#3d8fe8]"
+          className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0B6ED0] px-5 py-2 text-xs font-bold text-white transition-all hover:bg-[#3d8fe8] hover:shadow-[0_0_15px_rgba(11,110,208,0.4)]"
         >
-          Learn more
-          <span aria-hidden>→</span>
+          Explore the Course
+          <span aria-hidden className="transition-transform group-hover:translate-x-1">→</span>
         </Link>
       </div>
     </article>
+  );
+}
+
+type HistoryItem = {
+  id: string;
+  timestamp: number;
+  label: string;
+  output: string;
+  clipMinSec: number;
+  clipMaxSec: number;
+};
+
+function HistoryModal({
+  items,
+  onSelect,
+  onDelete,
+  onClear,
+  onClose,
+}: {
+  items: HistoryItem[];
+  onSelect: (item: HistoryItem) => void;
+  onDelete: (id: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md bg-zinc-950 border border-white/10 rounded-2xl shadow-3xl overflow-hidden animate-in zoom-in-95 duration-200">
+        <header className="flex items-center justify-between p-4 border-b border-white/5">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <History className="size-4" />
+            Recent Generations
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
+            <X className="size-5 text-zinc-400" />
+          </button>
+        </header>
+
+        <div className="max-h-[60vh] overflow-y-auto p-2">
+          {items.length === 0 ? (
+            <div className="py-12 text-center">
+              <History className="size-10 text-zinc-800 mx-auto mb-3" />
+              <p className="text-sm text-zinc-500">No history yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="group flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-white/5 transition-all text-left"
+                >
+                  <button
+                    onClick={() => onSelect(item)}
+                    className="flex-1 min-w-0 cursor-pointer text-left"
+                  >
+                    <p className="text-sm font-semibold text-white truncate group-hover:text-[#7EB8F0] transition-colors text-left">
+                      {item.label}
+                    </p>
+                    <p className="text-[10px] text-zinc-500 font-mono text-left">
+                      {new Date(item.timestamp).toLocaleString()} • {formatDurationSec(item.clipMinSec)}-{formatDurationSec(item.clipMaxSec)}
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => onDelete(item.id)}
+                    className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all cursor-pointer"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {items.length > 0 && (
+          <footer className="p-3 border-t border-white/5">
+            <button
+              onClick={onClear}
+              className="w-full py-2 text-xs font-bold text-red-500/80 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all cursor-pointer"
+            >
+              Clear All History
+            </button>
+          </footer>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -664,6 +747,61 @@ export default function Home() {
   const [limitNotice, setLimitNotice] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Load history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("sermon_history");
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load history", e);
+      }
+    }
+  }, []);
+
+  // Save history helper
+  const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
+    const newItem: HistoryItem = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      label,
+      output: text,
+      clipMinSec: min,
+      clipMaxSec: max,
+    };
+    setHistory((prev) => {
+      const next = [newItem, ...prev].slice(0, 10); // Keep last 10
+      localStorage.setItem("sermon_history", JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const deleteHistoryItem = (id: string) => {
+    setHistory((prev) => {
+      const next = prev.filter((i) => i.id !== id);
+      localStorage.setItem("sermon_history", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem("sermon_history");
+  };
+
+  const loadFromHistory = (item: HistoryItem) => {
+    setOutput(item.output);
+    setClipMinSec(item.clipMinSec);
+    setClipMaxSec(item.clipMaxSec);
+    setProcessingLabel(item.label);
+    setShowHistory(false);
+    setStatus("idle");
+    setErrorMessage(null);
+  };
+
   const sections = useMemo(() => parseBentoSections(output), [output]);
 
   const applyClipMin = useCallback((raw: number) => {
@@ -679,7 +817,7 @@ export default function Home() {
   }, []);
 
   const streamChatResponse = useCallback(
-    async (text: string, minSec: number, maxSec: number) => {
+    async (text: string, minSec: number, maxSec: number, label: string) => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -698,9 +836,7 @@ export default function Home() {
         try {
           const err = (await res.json()) as { error?: string };
           if (err.error) detail = err.error;
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
         throw new Error(detail || "Request failed");
       }
 
@@ -719,8 +855,9 @@ export default function Home() {
 
       accumulated += decoder.decode();
       setOutput(accumulated);
+      saveToHistory(label, accumulated, minSec, maxSec);
     },
-    [],
+    [saveToHistory],
   );
 
   const runWithText = useCallback(
@@ -737,7 +874,7 @@ export default function Home() {
       setStatus("loading");
 
       try {
-        await streamChatResponse(text, minSec, maxSec);
+        await streamChatResponse(text, minSec, maxSec, label);
         setLimitNotice(false);
         setStatus("idle");
       } catch (e) {
@@ -828,8 +965,8 @@ export default function Home() {
     }
     const label =
       inputMode === "upload"
-        ? fileName ?? "file"
-        : "text input";
+        ? fileName ?? "File Upload"
+        : "Pastes Content";
     void runWithText(trimmed, label, minSec, maxSec);
   }, [
     clipMaxSec,
@@ -846,96 +983,112 @@ export default function Home() {
   const streaming = status === "loading";
 
   return (
-    <main className="flex min-h-full flex-col bg-zinc-950 text-zinc-100">
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
-        <header className="mb-8 lg:mb-10">
-          <a
-            href="https://overflowcreative.net"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block text-[11px] font-semibold uppercase tracking-[0.28em] text-[#0B6ED0] transition-colors hover:text-[#3d8fe8]"
-            aria-label="Overflow Creative — home"
-          >
-            Overflow Creative
-          </a>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+    <main className="flex min-h-full flex-col bg-[#020202] text-zinc-100 font-sans selection:bg-[#0B6ED0]/30 selection:text-white">
+      {/* Background Glow */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+        <div className="absolute -top-[15%] -left-[10%] w-[50%] h-[50%] bg-[#0B6ED0]/10 rounded-full blur-[120px]" />
+        <div className="absolute top-[20%] -right-[10%] w-[40%] h-[40%] bg-indigo-600/5 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 pb-16 pt-12 sm:pt-16 lg:px-8">
+        <header className="mb-12 lg:mb-16">
+          <div className="flex items-center justify-between mb-4">
+            <a
+              href="https://overflowcreative.net"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.4em] text-[#0B6ED0] transition-colors hover:text-white"
+            >
+              Overflow Creative
+              <span className="h-px w-6 bg-[#0B6ED0]/40 transition-all group-hover:w-12 group-hover:bg-[#0B6ED0]" />
+            </a>
+
+            <button
+              onClick={() => setShowHistory(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-zinc-400 hover:bg-white/10 hover:text-white transition-all"
+            >
+              <History className="size-3.5" />
+              History
+            </button>
+          </div>
+
+          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
             Sermon Intelligence
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-400">
-            Upload a transcript or subtitles. We stream structured markdown you
-            can drop straight into YouTube and social—organized by section.
+          <p className="mt-6 max-w-2xl text-base leading-relaxed text-zinc-400 font-medium">
+            Generate a description, YouTube chapters, and social media clips from your sermon transcript.
           </p>
 
           <div
-            className="mt-5 flex gap-3 rounded-xl border border-[#0B6ED0]/20 bg-[#0B6ED0]/10 px-4 py-3 backdrop-blur-sm"
+            className="mt-8 flex items-center gap-4 rounded-2xl border border-white/5 bg-white/5 p-4 backdrop-blur-md shadow-xl"
             role="note"
           >
-            <Info
-              className="mt-0.5 size-5 shrink-0 text-[#5A9FE8]"
-              aria-hidden
-            />
-            <p className="text-sm leading-relaxed text-zinc-300">
-              Only have an audio or video file? Use a free tool like{" "}
+            <div className="bg-[#0B6ED0]/10 p-2 rounded-xl shrink-0 h-fit">
+              <Info className="size-5 text-[#5A9FE8]" aria-hidden />
+            </div>
+            <p className="text-sm leading-relaxed text-zinc-400">
+              <span className="text-white font-semibold"></span> Only have audio or video? Use a tool like{" "}
               <a
                 href="https://transcrisper.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium text-[#0B6ED0] underline decoration-[#0B6ED0]/40 underline-offset-2 hover:text-[#3d8fe8]"
+                className="font-bold text-[#0B6ED0] hover:text-[#3d8fe8] underline decoration-[#0B6ED0]/30 underline-offset-4"
               >
                 Transcrisper
               </a>{" "}
-              to convert it to a .txt file first.
+              to get a clean text transcript first.
             </p>
           </div>
         </header>
 
-        <section className="flex flex-col gap-6">
+        <section className="flex flex-col gap-8">
           {limitNotice && (
             <div
-              className="rounded-xl border border-amber-500/35 bg-amber-950/30 px-4 py-3 text-center backdrop-blur-sm"
+              className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-6 py-4 text-center backdrop-blur-md animate-in slide-in-from-top-2"
               role="status"
             >
-              <p className="text-sm leading-relaxed text-amber-100/95">
+              <p className="text-sm font-semibold text-amber-200/90 flex items-center justify-center gap-2">
+                <Loader2 className="size-4 animate-spin" />
                 {AI_LIMIT_NOTICE}
               </p>
             </div>
           )}
 
           {status !== "loading" && (
-            <>
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
               <div className="flex justify-center">
-                <div className="inline-flex max-w-full flex-wrap items-center justify-center gap-1 rounded-full border border-zinc-800 bg-zinc-900/60 p-1 backdrop-blur-md">
+                <div className="inline-flex p-1.5 rounded-2xl bg-white/5 border border-white/5 backdrop-blur-xl">
                   <button
                     type="button"
                     onClick={() => setInputMode("upload")}
                     className={[
-                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                      "rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "upload"
-                        ? "bg-[#0B6ED0] text-white"
-                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                        ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
+                        : "bg-transparent text-zinc-500 hover:text-white",
                     ].join(" ")}
                     aria-pressed={inputMode === "upload"}
                   >
-                    File Upload
+                    File Drop
                   </button>
                   <button
                     type="button"
                     onClick={() => setInputMode("paste")}
                     className={[
-                      "rounded-full px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                      "rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "paste"
-                        ? "bg-[#0B6ED0] text-white"
-                        : "bg-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-zinc-200",
+                        ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
+                        : "bg-transparent text-zinc-500 hover:text-white",
                     ].join(" ")}
                     aria-pressed={inputMode === "paste"}
                   >
-                    Paste Text
+                    Direct Paste
                   </button>
                 </div>
               </div>
 
               {inputMode === "upload" ? (
-                <>
+                <div className="relative group">
                   <div
                     role="button"
                     tabIndex={0}
@@ -945,30 +1098,16 @@ export default function Home() {
                         inputRef.current?.click();
                       }
                     }}
-                    onDragEnter={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDragActive(true);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setDragActive(true);
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                        setDragActive(false);
-                      }
-                    }}
+                    onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+                    onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
                     onDrop={onDrop}
                     onClick={() => inputRef.current?.click()}
                     className={[
-                      "group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-14 text-center transition-all duration-200",
+                      "cursor-pointer rounded-3xl border-2 border-dashed px-8 py-20 text-center transition-all duration-300",
                       dragActive
-                        ? "border-[#0B6ED0] bg-[#0B6ED0]/10 shadow-[0_0_40px_-8px_rgba(11,110,208,0.45)]"
-                        : "border-zinc-700 bg-zinc-900/30 hover:border-zinc-500 hover:bg-zinc-900/50",
+                        ? "border-[#0B6ED0] bg-[#0B6ED0]/10 ring-4 ring-indigo-500/10"
+                        : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.08]",
                     ].join(" ")}
                   >
                     <input
@@ -982,113 +1121,118 @@ export default function Home() {
                         e.target.value = "";
                       }}
                     />
-                    <p className="text-sm font-medium text-zinc-200 transition-colors group-hover:text-white">
-                      Drag and drop{" "}
-                      <span className="text-[#0B6ED0]">.txt</span> or{" "}
-                      <span className="text-[#0B6ED0]">.srt</span>
-                    </p>
-                    <p className="mt-2 text-xs text-zinc-500 transition-colors group-hover:text-zinc-400">
-                      or click to browse — release to upload
-                    </p>
+                    <div className="flex flex-col items-center">
+                      <div className="mb-4 p-4 rounded-full bg-white/5 border border-white/5 group-hover:scale-110 transition-transform">
+                        <Camera className="size-8 text-[#0B6ED0]" />
+                      </div>
+                      <p className="text-lg font-bold text-white tracking-tight">
+                        Drop your transcript here
+                      </p>
+                      <p className="mt-2 text-sm text-zinc-500 font-medium">
+                        Supports <span className="text-zinc-300">.txt</span> or <span className="text-zinc-300">.srt</span> files
+                      </p>
+                    </div>
                   </div>
-
                   {fileName && (
-                    <p className="text-center text-xs text-zinc-500">
-                      Last file:{" "}
-                      <span className="font-mono text-zinc-400">{fileName}</span>
-                    </p>
+                    <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10">
+                      <Check className="size-3 text-emerald-400" />
+                      <span className="text-[10px] font-bold text-white/90 truncate max-w-[200px]">{fileName}</span>
+                    </div>
                   )}
-                </>
+                </div>
               ) : (
                 <textarea
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
-                  rows={12}
-                  placeholder="Paste your sermon transcript here..."
-                  className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-500 outline-none transition-shadow focus:ring-2 focus:ring-[#0B6ED0]"
+                  rows={10}
+                  placeholder="Paste your verbatim sermon transcript content here..."
+                  className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-600 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
                 />
               )}
 
-              <div className="space-y-4 rounded-2xl border border-zinc-800/90 bg-zinc-900/40 px-5 py-5 backdrop-blur-md">
-                <p className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  Clip length
-                </p>
-                <DualClipRangeSlider
-                  clipMinSec={clipMinSec}
-                  clipMaxSec={clipMaxSec}
-                  onMinChange={applyClipMin}
-                  onMaxChange={applyClipMax}
-                />
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                <div className="space-y-4 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
+                  <DualClipRangeSlider
+                    clipMinSec={clipMinSec}
+                    clipMaxSec={clipMaxSec}
+                    onMinChange={applyClipMin}
+                    onMaxChange={applyClipMax}
+                  />
+                </div>
 
-              <div className="flex flex-col items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => void handleGenerate()}
-                  className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[#0B6ED0] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#3d8fe8]"
-                >
-                  Generate
-                </button>
-                <p className="max-w-md text-center text-xs leading-relaxed text-zinc-500">
-                  {COMMUNITY_DISCLAIMER}
-                </p>
+                <div className="flex flex-col gap-4">
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerate()}
+                    className="w-full inline-flex cursor-pointer items-center justify-center rounded-3xl bg-[#0B6ED0] py-5 text-sm font-bold uppercase tracking-[0.2em] text-white transition-all hover:bg-[#3d8fe8] hover:shadow-[0_0_25px_rgba(11,110,208,0.3)] active:scale-[0.98]"
+                  >
+                    Generate
+                  </button>
+                  <p className="px-4 text-center text-[10px] leading-relaxed text-zinc-600 font-bold uppercase tracking-wider">
+                    {COMMUNITY_DISCLAIMER}
+                  </p>
+                </div>
               </div>
-            </>
+            </div>
           )}
 
           {status === "loading" && (
             <div
-              className="flex flex-col items-center justify-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-5 text-center backdrop-blur-md"
+              className="flex flex-col items-center justify-center gap-6 rounded-3xl border border-white/10 bg-white/5 py-24 text-center backdrop-blur-3xl animate-in zoom-in-95 duration-500"
               aria-live="polite"
               aria-busy="true"
             >
-              <p className="text-sm font-medium text-zinc-200">
-                Processing:{" "}
-                <span className="text-[#7EB8F0]">{processingLabel}</span>
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                <span
-                  className="size-5 shrink-0 animate-spin rounded-full border-2 border-zinc-600 border-t-[#0B6ED0]"
-                  aria-hidden
-                />
-                <span className="text-sm text-zinc-400">
-                  Streaming markdown from the model…
-                </span>
+              <div className="relative">
+                <div className="absolute inset-0 size-16 bg-[#0B6ED0] blur-2xl opacity-20 animate-pulse" />
+                <Loader2 className="size-16 animate-spin text-[#0B6ED0]" strokeWidth={1.5} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xl font-bold text-white tracking-tight">
+                  Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
+                </p>
+                <p className="text-sm text-zinc-500 font-medium">
+                  Designing your digital strategy. This takes a few moments.
+                </p>
               </div>
             </div>
           )}
 
           {status === "error" && errorMessage && (
-            <p
-              className="rounded-xl border border-red-900/50 bg-red-950/25 px-4 py-3 text-center text-sm text-red-200 backdrop-blur-sm"
-              role="alert"
-            >
-              {errorMessage}
-            </p>
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-4 text-center animate-in shake duration-500">
+              <p className="text-sm font-bold text-red-200/90 flex items-center justify-center gap-2">
+                <X className="size-4" />
+                {errorMessage}
+              </p>
+            </div>
           )}
 
           {showBento && (
-            <div className="space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  Results
-                </h2>
+            <div className="space-y-6 pt-8 border-t border-white/5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-500 mb-1">
+                    Strategy Output
+                  </h2>
+                  <p className="text-xs text-zinc-400 font-medium">
+                    Content derived from <span className="text-white">{processingLabel}</span>
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => void copyOutput()}
                   disabled={!output.trim()}
-                  className="inline-flex items-center justify-center gap-2 self-end rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-200 backdrop-blur-md transition-all hover:border-[#0B6ED0]/50 hover:bg-zinc-800/80 hover:text-white disabled:pointer-events-none disabled:opacity-40 sm:self-auto"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-xs font-bold text-white backdrop-blur-md transition-all hover:bg-white/10 disabled:opacity-30 cursor-pointer"
                 >
                   {copied ? (
-                    <Check className="size-3.5 text-emerald-400" aria-hidden />
+                    <Check className="size-3.5 text-emerald-400" />
                   ) : (
-                    <Copy className="size-3.5 text-zinc-400" aria-hidden />
+                    <Copy className="size-3.5" />
                   )}
-                  {copied ? "Copied" : "Copy"}
+                  {copied ? "Copied All" : "Copy Full Markdown"}
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {sections.length > 0 ? (
                   sections.map((s, i) =>
                     isClipsSectionTitle(s.title) ? (
@@ -1103,67 +1247,77 @@ export default function Home() {
                         key={`${s.title}-${i}`}
                         title={s.title}
                         body={s.body}
-                        streaming={
-                          streaming && i === sections.length - 1
-                        }
+                        streaming={streaming && i === sections.length - 1}
                       />
                     ),
                   )
                 ) : (
-                  <div className="col-span-1 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 p-8 text-center text-sm text-zinc-500 backdrop-blur-sm md:col-span-2 xl:col-span-3">
-                    Processing…
+                  <div className="col-span-full py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
+                    <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
+                    <p className="text-sm text-zinc-500 font-bold uppercase tracking-widest">Constructing View...</p>
                   </div>
                 )}
 
-                <PromoCard />
+                {!streaming && <PromoCard />}
               </div>
             </div>
           )}
         </section>
       </div>
 
-      <footer className="mt-auto border-t border-zinc-800/80 bg-black/40 px-4 py-10 backdrop-blur-md sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-          <div className="space-y-1">
-            <p className="text-sm text-zinc-400">
-              Built by{" "}
+      {showHistory && (
+        <HistoryModal
+          items={history}
+          onSelect={loadFromHistory}
+          onDelete={deleteHistoryItem}
+          onClear={clearHistory}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
+
+      <footer className="mt-auto border-t border-white/5 bg-black/40 px-6 py-12 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 text-center sm:flex-row sm:justify-between sm:text-left">
+          <div className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Engineered by</p>
               <a
                 href="https://overflowcreative.net"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium text-zinc-200 underline decoration-zinc-600 underline-offset-2 transition-colors hover:text-[#0B6ED0]"
+                className="text-lg font-bold text-white hover:text-[#0B6ED0] transition-colors"
               >
                 Overflow Creative
               </a>
-              .
-            </p>
+            </div>
             <a
               href="https://tally.so/r/wkJPlj"
-              className="text-xs font-medium text-[#0B6ED0] underline decoration-[#0B6ED0]/35 underline-offset-2 hover:text-[#3d8fe8]"
+              className="inline-flex py-1 text-xs font-bold text-[#0B6ED0] hover:text-white transition-colors underline decoration-[#0B6ED0]/30 underline-offset-4"
             >
-              Provide Feedback
+              Share Feedback
             </a>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-4">
             <a
               href="https://www.instagram.com/jake.crtv/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex size-10 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/50 text-zinc-400 transition-colors hover:border-[#0B6ED0]/40 hover:text-[#0B6ED0]"
-              aria-label="Overflow Creative on Instagram"
+              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
+              aria-label="Instagram"
             >
-              <Camera className="size-[18px]" strokeWidth={2} />
+              <Camera className="size-5" />
             </a>
             <a
               href="https://www.youtube.com/@overflow.creative"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex size-10 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/50 text-zinc-400 transition-colors hover:border-[#0B6ED0]/40 hover:text-[#0B6ED0]"
-              aria-label="Overflow Creative on YouTube"
+              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
+              aria-label="YouTube"
             >
-              <CirclePlay className="size-[18px]" strokeWidth={2} />
+              <CirclePlay className="size-5" />
             </a>
           </div>
+        </div>
+        <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 text-center">
+          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em]">
+            © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
+          </p>
         </div>
       </footer>
     </main>
