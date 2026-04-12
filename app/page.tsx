@@ -827,7 +827,7 @@ export default function Home() {
   const streamChatResponse = useCallback(
     async (text: string, minSec: number, maxSec: number, label: string) => {
       // 1. Try local WebGPU execution if supported
-      if (engineChoice === "local" && typeof navigator !== "undefined" && navigator.gpu) {
+      if (engineChoice === "local" && typeof navigator !== "undefined" && (navigator as any).gpu) {
         try {
           setIsInitializingEngine(true);
           const engine = await CreateMLCEngine("Phi-3-mini-4k-instruct-q4f16_1-MLC", {
