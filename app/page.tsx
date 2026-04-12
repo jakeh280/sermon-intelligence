@@ -16,6 +16,8 @@ import type { ComponentProps, CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CreateMLCEngine } from "@mlc-ai/web-llm";
+import { buildSystemPrompt } from "@/lib/systemPrompt";
 
 const ACCENT = "#0B6ED0";
 const ACCEPTED = new Set([".txt", ".srt"]);
@@ -749,6 +751,12 @@ export default function Home() {
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [engineChoice, setEngineChoice] = useState<"local" | "cloud">("local");
+
+  // WebLLM State
+  const [isInitializingEngine, setIsInitializingEngine] = useState(false);
+  const [engineProgress, setEngineProgress] = useState(0);
+  const [engineInitText, setEngineInitText] = useState("");
 
   // Load history on mount
   useEffect(() => {
@@ -818,6 +826,46 @@ export default function Home() {
 
   const streamChatResponse = useCallback(
     async (text: string, minSec: number, maxSec: number, label: string) => {
+      // 1. Try local WebGPU execution if supported
+      if (engineChoice === "local" && typeof navigator !== "undefined" && navigator.gpu) {
+        try {
+          setIsInitializingEngine(true);
+          const engine = await CreateMLCEngine("Phi-3-mini-4k-instruct-q4f16_1-MLC", {
+            initProgressCallback: (p) => {
+              setEngineProgress(p.progress * 100);
+              setEngineInitText(p.text);
+            },
+          });
+          setIsInitializingEngine(false);
+
+          const systemMessage = buildSystemPrompt(minSec, maxSec);
+          const chunks = await engine.chat.completions.create({
+            messages: [
+              { role: "system", content: systemMessage },
+              { role: "user", content: `Transcript content:\n\n${text}` },
+            ],
+            stream: true,
+            temperature: 0.7,
+          });
+
+          let accumulated = "";
+          for await (const chunk of chunks) {
+             const content = chunk.choices[0]?.delta?.content;
+             if (content) {
+                 accumulated += content;
+                 setOutput(accumulated);
+             }
+          }
+          saveToHistory(label, accumulated, minSec, maxSec);
+          return; // Local completion succeeded!
+        } catch (err) {
+          console.warn("Local WebGPU inference failed, falling back to server...", err);
+          setIsInitializingEngine(false);
+          // Allow code execution to fall through to the normal server fetch.
+        }
+      }
+
+      // 2. Server API fallback processing
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -827,7 +875,6 @@ export default function Home() {
           clipMaxSec: maxSec,
         }),
       });
-
       if (!res.ok) {
         if (isAiLimitHttpStatus(res.status)) {
           throw aiLimitError();
@@ -857,7 +904,7 @@ export default function Home() {
       setOutput(accumulated);
       saveToHistory(label, accumulated, minSec, maxSec);
     },
-    [saveToHistory],
+    [saveToHistory, engineChoice],
   );
 
   const runWithText = useCallback(
@@ -1005,7 +1052,7 @@ export default function Home() {
 
             <button
               onClick={() => setShowHistory(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-zinc-400 hover:bg-white/10 hover:text-white transition-all"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
             >
               <History className="size-3.5" />
               History
@@ -1062,7 +1109,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setInputMode("upload")}
                     className={[
-                      "rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
+                      "cursor-pointer rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "upload"
                         ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
                         : "bg-transparent text-zinc-500 hover:text-white",
@@ -1075,7 +1122,7 @@ export default function Home() {
                     type="button"
                     onClick={() => setInputMode("paste")}
                     className={[
-                      "rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
+                      "cursor-pointer rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "paste"
                         ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
                         : "bg-transparent text-zinc-500 hover:text-white",
@@ -1150,14 +1197,42 @@ export default function Home() {
                 />
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                <div className="space-y-4 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
-                  <DualClipRangeSlider
-                    clipMinSec={clipMinSec}
-                    clipMaxSec={clipMaxSec}
-                    onMinChange={applyClipMin}
-                    onMaxChange={applyClipMax}
-                  />
+              <div className="flex flex-col gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                  <div className="flex flex-col justify-center space-y-4 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
+                    <DualClipRangeSlider
+                      clipMinSec={clipMinSec}
+                      clipMaxSec={clipMaxSec}
+                      onMinChange={applyClipMin}
+                      onMaxChange={applyClipMax}
+                    />
+                  </div>
+
+                  <div className="flex flex-col justify-center gap-3 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
+                    <div className="flex text-[10px] font-bold uppercase tracking-widest text-center bg-transparent">
+                      <button
+                        type="button"
+                        onClick={() => setEngineChoice("local")}
+                        className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all ${engineChoice === "local" ? "bg-[#0B6ED0] text-white shadow-[0_0_15px_rgba(11,110,208,0.3)]" : "text-zinc-500 hover:text-zinc-300"}`}
+                        title="Faster, unlimited usage, smaller model"
+                      >
+                        Local Device
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEngineChoice("cloud")}
+                        className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all border border-transparent ${engineChoice === "cloud" ? "!border-[#0B6ED0] text-[#7EB8F0] bg-[#0B6ED0]/10 shadow-[0_0_15px_rgba(11,110,208,0.15)]" : "text-zinc-500 hover:text-zinc-300"}`}
+                        title="Smarter, unlimited long transcripts, limited usage"
+                      >
+                        Cloud AI
+                      </button>
+                    </div>
+                    <div className="px-2 pt-1 text-center text-xs text-zinc-400 leading-tight font-medium">
+                      {engineChoice === "local" 
+                        ? "Faster • Unlimited Uses • Smaller Model (Limited Max Length)" 
+                        : "Smarter • Unlimited Length • Limited free uses per hour"}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -1178,22 +1253,49 @@ export default function Home() {
 
           {status === "loading" && (
             <div
-              className="flex flex-col items-center justify-center gap-6 rounded-3xl border border-white/10 bg-white/5 py-24 text-center backdrop-blur-3xl animate-in zoom-in-95 duration-500"
+              className="flex flex-col items-center justify-center gap-6 rounded-3xl border border-white/10 bg-white/5 py-24 px-6 text-center backdrop-blur-3xl animate-in zoom-in-95 duration-500"
               aria-live="polite"
               aria-busy="true"
             >
-              <div className="relative">
-                <div className="absolute inset-0 size-16 bg-[#0B6ED0] blur-2xl opacity-20 animate-pulse" />
-                <Loader2 className="size-16 animate-spin text-[#0B6ED0]" strokeWidth={1.5} />
-              </div>
-              <div className="space-y-2">
-                <p className="text-xl font-bold text-white tracking-tight">
-                  Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
-                </p>
-                <p className="text-sm text-zinc-500 font-medium">
-                  Designing your digital strategy. This takes a few moments.
-                </p>
-              </div>
+              {isInitializingEngine ? (
+                <div className="w-full max-w-sm mx-auto space-y-6">
+                  <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="size-10 animate-spin text-[#0B6ED0]" strokeWidth={2} />
+                    <p className="text-xl font-bold text-white tracking-tight">
+                      Downloading Required Resources...
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full bg-[#0B6ED0] transition-all duration-300 shadow-[0_0_12px_rgba(11,110,208,0.8)]"
+                        style={{ width: `${Math.max(0, Math.min(100, engineProgress))}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-[#7EB8F0] font-mono text-center tracking-widest font-bold">
+                      {Math.round(engineProgress)}%
+                    </p>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest text-center mt-4">
+                    This only happens once
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="relative">
+                    <div className="absolute inset-0 size-16 bg-[#0B6ED0] blur-2xl opacity-20 animate-pulse" />
+                    <Loader2 className="size-16 animate-spin text-[#0B6ED0]" strokeWidth={1.5} />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xl font-bold text-white tracking-tight">
+                      Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
+                    </p>
+                    <p className="text-sm text-zinc-500 font-medium">
+                      Designing your digital strategy. This takes a few moments.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
