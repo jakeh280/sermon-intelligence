@@ -96,7 +96,6 @@ function parseBentoSections(markdown: string): BentoSection[] {
 }
 
 const CLIP_FIELD_LABELS = [
-  "Favorable Percentage",
   "Timestamps",
   "Duration",
   "Title",
@@ -336,10 +335,12 @@ function BentoCard({
   title,
   body,
   streaming,
+  className,
 }: {
   title: string;
   body: string;
   streaming: boolean;
+  className?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -356,7 +357,7 @@ function BentoCard({
 
   return (
     <article
-      className="flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-5 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500"
+      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-5 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className || ""}`}
     >
       <header className="mb-3 flex items-start justify-between gap-3 border-b border-white/5 pb-3">
         <h2 className="text-sm font-semibold tracking-tight text-white/90">
@@ -396,6 +397,99 @@ function BentoCard({
           <div className="space-y-2">
             <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
             <div className="h-4 w-1/2 animate-pulse rounded bg-white/5" />
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function TitlesBentoCard({
+  title,
+  body,
+  streaming,
+  className,
+}: {
+  title: string;
+  body: string;
+  streaming: boolean;
+  className?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!body) return;
+    try {
+      await navigator.clipboard.writeText(body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
+  const titleMarkdownComponents: NonNullable<ComponentProps<typeof ReactMarkdown>["components"]> = {
+    ...markdownComponents,
+    ol: ({ children, ...props }) => (
+      <ol className="flex flex-col md:flex-row gap-4 w-full list-none" {...props}>
+        {children}
+      </ol>
+    ),
+    ul: ({ children, ...props }) => (
+      <ul className="flex flex-col md:flex-row gap-4 w-full list-none" {...props}>
+        {children}
+      </ul>
+    ),
+    li: ({ children, ...props }) => (
+      <li className="flex-1 rounded-2xl bg-black/20 border border-white/5 p-4 text-center text-sm font-semibold text-white shadow-lg list-none flex items-center justify-center [&>p]:mb-0 [&>p]:flex-1" {...props}>
+        {children}
+      </li>
+    ),
+  };
+
+  return (
+    <article
+      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className || ""}`}
+    >
+      <header className="mb-4 flex items-start justify-between gap-3 border-b border-white/5 pb-4">
+        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white/95 sm:text-2xl">
+          <span
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_rgba(11,110,208,0.6)]"
+            style={{ backgroundColor: ACCENT }}
+            aria-hidden
+          />
+          {title}
+        </h2>
+        <div className="flex items-center gap-3">
+          {streaming && !body && (
+            <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
+          )}
+          {body && !streaming && (
+            <button
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+              title="Copy section"
+            >
+              {copied ? (
+                <Check className="size-3 text-emerald-400" aria-hidden />
+              ) : (
+                <Copy className="size-3" aria-hidden />
+              )}
+              {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+        </div>
+      </header>
+      <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300 w-full">
+        {body ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={titleMarkdownComponents}>
+            {body}
+          </ReactMarkdown>
+        ) : streaming ? (
+          <div className="flex flex-col md:flex-row gap-4 w-full">
+            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
+            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
+            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
           </div>
         ) : null}
       </div>
@@ -499,10 +593,12 @@ function ClipsBentoCard({
   title,
   body,
   streaming,
+  className,
 }: {
   title: string;
   body: string;
   streaming: boolean;
+  className?: string;
 }) {
   const { preamble, clips } = useMemo(() => parseClipOptions(body), [body]);
   const clipsLookStructured = clips.some(
@@ -512,15 +608,14 @@ function ClipsBentoCard({
         c.Timestamps ||
         c.Transcript ||
         c.Description ||
-        c.Duration ||
-        c["Favorable Percentage"],
+        c.Duration,
       ),
   );
   const showClipGrid = clips.length > 0 && clipsLookStructured;
 
   return (
     <article
-      className="col-span-1 flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl md:col-span-2 xl:col-span-3 transition-all hover:border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-700"
+      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-700 ${className || ""}`}
     >
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
         <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white/95 sm:text-2xl">
@@ -549,11 +644,6 @@ function ClipsBentoCard({
             >
               <div className="mb-3 flex flex-col gap-2 border-b border-white/5 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  {clip["Favorable Percentage"] ? (
-                    <span className="rounded-md bg-[#0B6ED0]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#7EB8F0]">
-                      {clip["Favorable Percentage"]} Match
-                    </span>
-                  ) : null}
                   {clip.Duration ? (
                     <span className="text-[10px] font-bold tabular-nums tracking-widest text-zinc-500">
                       {clip.Duration}
@@ -584,7 +674,7 @@ function ClipsBentoCard({
               {clip["Why it works"] ? (
                 <p className="mt-auto text-sm leading-relaxed text-zinc-500 italic">
                   <span className="font-semibold text-zinc-400">
-                    Hook:{" "}
+                    Why it works:{" "}
                   </span>
                   {clip["Why it works"]}
                 </p>
@@ -613,10 +703,10 @@ function ClipsBentoCard({
   );
 }
 
-function PromoCard() {
+function PromoCard({ className }: { className?: string } = {}) {
   return (
     <article
-      className="relative col-span-1 overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-[#0B6ED0]/10 p-6 shadow-2xl backdrop-blur-xl md:col-span-2 xl:col-span-3 transition-all hover:border-white/10 group"
+      className={`relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-[#0B6ED0]/10 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 group ${className || ""}`}
     >
       <div
         className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-25 blur-3xl transition-transform group-hover:scale-125"
@@ -748,27 +838,33 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [modelSwitchNotice, setModelSwitchNotice] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [engineChoice, setEngineChoice] = useState<"local" | "cloud">("local");
+  const [webGpuAvailable, setWebGpuAvailable] = useState(false);
+  const [engineChoice, setEngineChoice] = useState<"local" | "cloud">("cloud");
 
   // WebLLM State
   const [isInitializingEngine, setIsInitializingEngine] = useState(false);
   const [engineProgress, setEngineProgress] = useState(0);
-  const [engineInitText, setEngineInitText] = useState("");
 
   // Load history on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("sermon_history");
-    if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load history", e);
-      }
+useEffect(() => {
+  const saved = localStorage.getItem("sermon_history");
+  if (saved) {
+    try {
+      setHistory(JSON.parse(saved));
+    } catch (e) {
+      console.error("Failed to load history", e);
     }
-  }, []);
+  }
+
+  if (typeof navigator !== "undefined" && (navigator as any).gpu) {
+    setWebGpuAvailable(true);
+    setEngineChoice("local");
+  }
+}, []);
 
   // Save history helper
   const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
@@ -833,7 +929,6 @@ export default function Home() {
           const engine = await CreateMLCEngine("Phi-3-mini-4k-instruct-q4f16_1-MLC", {
             initProgressCallback: (p) => {
               setEngineProgress(p.progress * 100);
-              setEngineInitText(p.text);
             },
           });
           setIsInitializingEngine(false);
@@ -859,9 +954,16 @@ export default function Home() {
           saveToHistory(label, accumulated, minSec, maxSec);
           return; // Local completion succeeded!
         } catch (err) {
-          console.warn("Local WebGPU inference failed, falling back to server...", err);
           setIsInitializingEngine(false);
-          // Allow code execution to fall through to the normal server fetch.
+          let errorMessage = err instanceof Error ? err.message : String(err);
+          if (errorMessage.includes("context window size") || errorMessage.includes("tokens exceed") || errorMessage.includes("model limit")) {
+            setEngineChoice("cloud");
+            setModelSwitchNotice(true);
+            setTimeout(() => setModelSwitchNotice(false), 6000);
+            // Falls through to Cloud AI
+          } else {
+            throw new Error(`Local inference failed: ${errorMessage}. Switch to Cloud AI and try again.`);
+          }
         }
       }
 
@@ -1013,7 +1115,7 @@ export default function Home() {
     const label =
       inputMode === "upload"
         ? fileName ?? "File Upload"
-        : "Pastes Content";
+        : `Pasted Text (${pastedText.trim().split(/\s+/).length} words)`;
     void runWithText(trimmed, label, minSec, maxSec);
   }, [
     clipMaxSec,
@@ -1038,6 +1140,20 @@ export default function Home() {
       </div>
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 pb-16 pt-12 sm:pt-16 lg:px-8">
+        {/* Model Switch Notice Toast */}
+        {modelSwitchNotice && (
+          <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-500">
+            <div className="flex items-center gap-3 rounded-full border border-[#0B6ED0]/30 bg-black/80 px-5 py-3 shadow-[0_0_20px_rgba(11,110,208,0.3)] backdrop-blur-xl">
+              <div className="flex size-6 items-center justify-center rounded-full bg-[#0B6ED0]/20">
+                <Info className="size-3.5 text-[#7EB8F0]" />
+              </div>
+              <p className="text-sm font-semibold text-white/90">
+                Transcript too large for local model. <span className="text-[#7EB8F0]">Switching to Cloud AI!</span>
+              </p>
+            </div>
+          </div>
+        )}
+
         <header className="mb-12 lg:mb-16">
           <div className="flex items-center justify-between mb-4">
             <a
@@ -1209,29 +1325,41 @@ export default function Home() {
                   </div>
 
                   <div className="flex flex-col justify-center gap-3 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
-                    <div className="flex text-[10px] font-bold uppercase tracking-widest text-center bg-transparent">
-                      <button
-                        type="button"
-                        onClick={() => setEngineChoice("local")}
-                        className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all ${engineChoice === "local" ? "bg-[#0B6ED0] text-white shadow-[0_0_15px_rgba(11,110,208,0.3)]" : "text-zinc-500 hover:text-zinc-300"}`}
-                        title="Faster, unlimited usage, smaller model"
-                      >
-                        Local Device
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEngineChoice("cloud")}
-                        className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all border border-transparent ${engineChoice === "cloud" ? "!border-[#0B6ED0] text-[#7EB8F0] bg-[#0B6ED0]/10 shadow-[0_0_15px_rgba(11,110,208,0.15)]" : "text-zinc-500 hover:text-zinc-300"}`}
-                        title="Smarter, unlimited long transcripts, limited usage"
-                      >
-                        Cloud AI
-                      </button>
-                    </div>
-                    <div className="px-2 pt-1 text-center text-xs text-zinc-400 leading-tight font-medium">
-                      {engineChoice === "local" 
-                        ? "Faster • Unlimited Uses • Smaller Model (Limited Max Length)" 
-                        : "Smarter • Unlimited Length • Limited free uses per hour"}
-                    </div>
+                    {webGpuAvailable ? (
+                      <>
+                        <div className="flex text-[10px] font-bold uppercase tracking-widest text-center bg-transparent">
+                          <button
+                            type="button"
+                            onClick={() => setEngineChoice("local")}
+                            className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all ${engineChoice === "local" ? "bg-[#0B6ED0] text-white shadow-[0_0_15px_rgba(11,110,208,0.3)]" : "text-zinc-500 hover:text-zinc-300"}`}
+                          >
+                            Local Device
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEngineChoice("cloud")}
+                            className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all border border-transparent ${engineChoice === "cloud" ? "!border-[#0B6ED0] text-[#7EB8F0] bg-[#0B6ED0]/10 shadow-[0_0_15px_rgba(11,110,208,0.15)]" : "text-zinc-500 hover:text-zinc-300"}`}
+                          >
+                            Cloud AI
+                          </button>
+                        </div>
+                        <div className="px-2 pt-1 text-center text-xs text-zinc-400 leading-tight font-medium">
+                          {engineChoice === "local"
+                            ? "Runs on your device • Unlimited • Smaller model"
+                            : "Smarter • Unlimited length • Limited free uses per hour"}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center space-y-1">
+                        <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
+                        <p className="text-xs text-zinc-500 leading-relaxed">
+                          Smarter results • Handles any length transcript
+                        </p>
+                        <p className="text-[10px] text-zinc-600 font-medium">
+                          Limited free uses per hour
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1334,33 +1462,57 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {sections.length > 0 ? (
-                  sections.map((s, i) =>
-                    isClipsSectionTitle(s.title) ? (
-                      <ClipsBentoCard
-                        key={`${s.title}-${i}`}
-                        title={s.title}
-                        body={s.body}
-                        streaming={streaming && i === sections.length - 1}
-                      />
-                    ) : (
-                      <BentoCard
-                        key={`${s.title}-${i}`}
-                        title={s.title}
-                        body={s.body}
-                        streaming={streaming && i === sections.length - 1}
-                      />
-                    ),
-                  )
+                  sections.map((s, i) => {
+                    const isTitlesSection = /^titles\b/i.test(s.title);
+                    const isClipsSection = isClipsSectionTitle(s.title);
+
+                    let cardClassName = "col-span-1";
+                    if (isTitlesSection || isClipsSection) {
+                       cardClassName = "col-span-1 md:col-span-2";
+                    }
+
+                    if (isClipsSection) {
+                      return (
+                        <ClipsBentoCard
+                          key={`${s.title}-${i}`}
+                          title={s.title}
+                          body={s.body}
+                          className={cardClassName}
+                          streaming={streaming && i === sections.length - 1}
+                        />
+                      );
+                    } else if (isTitlesSection) {
+                      return (
+                        <TitlesBentoCard
+                          key={`${s.title}-${i}`}
+                          title={s.title}
+                          body={s.body}
+                          className={cardClassName}
+                          streaming={streaming && i === sections.length - 1}
+                        />
+                      );
+                    } else {
+                      return (
+                        <BentoCard
+                          key={`${s.title}-${i}`}
+                          title={s.title}
+                          body={s.body}
+                          className={cardClassName}
+                          streaming={streaming && i === sections.length - 1}
+                        />
+                      );
+                    }
+                  })
                 ) : (
-                  <div className="col-span-full py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
+                  <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
                     <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
                     <p className="text-sm text-zinc-500 font-bold uppercase tracking-widest">Constructing View...</p>
                   </div>
                 )}
 
-                {!streaming && <PromoCard />}
+                {!streaming && <PromoCard className="col-span-1 md:col-span-2" />}
               </div>
             </div>
           )}
