@@ -842,6 +842,7 @@ export default function Home() {
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [webGpuAvailable, setWebGpuAvailable] = useState(false);
   const [engineChoice, setEngineChoice] = useState<"local" | "cloud">("cloud");
 
@@ -1529,6 +1530,46 @@ useEffect(() => {
         />
       )}
 
+      {showDisclaimer && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center pb-8 sm:items-center"
+          onClick={() => setShowDisclaimer(false)}
+        >
+          <div
+            className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white">Disclaimers</h3>
+              <button
+                onClick={() => setShowDisclaimer(false)}
+                className="text-zinc-500 hover:text-white transition-colors"
+                aria-label="Close"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <ul className="space-y-3 text-xs text-zinc-400 leading-relaxed">
+              <li>
+                <span className="font-semibold text-zinc-300">Cloud processing</span> is handled by Google Gemini&apos;s free tier. Google may use inputs to improve their models per their{" "}
+                <a
+                  href="https://policies.google.com/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#0B6ED0] underline underline-offset-2"
+                >
+                  terms of service
+                </a>
+                .
+              </li>
+              <li>
+                <span className="font-semibold text-zinc-300">Overflow Creative</span> does not collect, store, or transmit any of your data. Nothing you enter here is saved by us.
+              </li>
+            </ul>
+          </div>
+        </div>
+      )}
+
       <footer className="mt-auto border-t border-white/5 bg-black/40 px-6 py-12 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="space-y-4">
@@ -1568,10 +1609,16 @@ useEffect(() => {
             </a>
           </div>
         </div>
-        <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 text-center">
+        <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between">
           <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em]">
             © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
           </p>
+          <button
+            onClick={() => setShowDisclaimer(true)}
+            className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em] hover:text-zinc-400 transition-colors"
+          >
+            Disclaimers
+          </button>
         </div>
       </footer>
     </main>
