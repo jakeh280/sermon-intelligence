@@ -863,7 +863,6 @@ useEffect(() => {
 
   if (typeof navigator !== "undefined" && (navigator as any).gpu) {
     setWebGpuAvailable(true);
-    setEngineChoice("local");
   }
 }, []);
 
