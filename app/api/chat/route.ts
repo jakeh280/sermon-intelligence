@@ -46,9 +46,9 @@ export async function POST(req: Request) {
 
   const text =
     typeof body === "object" &&
-    body !== null &&
-    "text" in body &&
-    typeof (body as { text: unknown }).text === "string"
+      body !== null &&
+      "text" in body &&
+      typeof (body as { text: unknown }).text === "string"
       ? (body as { text: string }).text.trim()
       : "";
 
@@ -72,10 +72,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Real AI Analysis with gemini-2.5-flash
+  // Real AI Analysis with gemini-2.5-flash lite
   try {
     const result = streamText({
-      model: google("gemini-2.5-flash"),
+      model: google("gemini-2.5-flash-lite"),
       system: buildSystemPrompt(clips.min, clips.max),
       messages: [
         {
