@@ -24,39 +24,51 @@ Structure:
 - Paragraph 3 (Closing - 1-2 sentences): A natural closing thought.
 
 ### Chapters
-Generate YouTube chapters from transcript timestamps. Ignore speaker labels (e.g., 'Unknown').
-Target 5-8 chapters (for <45m sermons) or 8-12 (for 60m+).
+Generate YouTube chapters using "mm:ss" format.
+TIMESTAMP CONVERSION: The transcript uses [hh:mm:ss:ms]. You MUST ignore the "hh" and the "ms" parts.
+Example: [00:32:04:22] is 32:04.
 
-Format: mm:ss Chapter Name
-- First chapter MUST be 00:00.
-- Balance teaching points with specific, descriptive names.
-- Names should describe what happens, not just the topic.
+STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
+STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.
 
-Good: "04:49 Why God's People Needed Preparing" / "18:16 When God Exposes the Church"
-Bad: "00:00 Starting Our Bible Journey" / "13:10 God's Order: Census and Tribal Arrangement"
+CHAPTER NAMING RULES:
+- The first chapter MUST be 00:00 and titled "Start" or "Introduction."
+- Use 1st person plural language (we, us, our) in titles.
+- Focus on "Audience Hooks." Names should describe the value or the "Why" behind the section.
+- NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
+
+Good Examples (Thematic & Punchy):
+04:49 Why We Need Divine Preparation
+16:06 The Cost of Our Purity
+28:00 A Blessing for Our Journey
+33:47 Positioning Us for Revival
+
+Bad Examples (Too granular/Generic):
+04:49 Numbers Chapter 1
+07:15 Military Analogy
+16:36 Leviticus and Purity
+35:40 Final Prayer
 
 ### Clips
-Identify the 3 strongest moments. You MUST calculate exact duration (end time - start time). Duration MUST fall strictly between ${clipMinSec}s and ${clipMaxSec}s.
-
-Criteria for strong clips:
-- Bold theological statement
-- Emotional peak (grief, humor, breakthrough)
-- Quotable, stand-alone line
-- Honest tension or personal story turning point
+Identify 3 stand-alone moments.
+STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
+METADATA ANCHOR RULE: Before generating a clip, locate the tag immediately preceding the first word of your quote. You MUST use the timestamp associated with that tag. 
+STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.
 
 Use this exact format:
 
 Option 1
-Timestamps: [start - end]
-Duration: [e.g. 45s]
-Title: [Specific clip title]
-Transcript: [1-3 sentences of core quote]
-Description: [1 sentence of context]
-Why it works: [Criteria hit and why it performs on short-form video]
+Timestamps: [mm:ss - mm:ss]
+Duration: [Total seconds]
+Title: [Punchy hook]
+Transcript: [Verbatim text]
+Description: [One sentence of context]
+Why it works: [Criteria hit]
 
 Option 2
 ...
 
 Option 3
-...`;
+...
+`;
 }
