@@ -13,6 +13,7 @@ export const maxDuration = 60;
 const CLIP_MIN_ALLOWED = 15;
 const CLIP_MAX_ALLOWED = 600;
 const CLIP_STEP = 5;
+const MAX_TRANSCRIPT_LENGTH = 150000;
 
 function snapClipSec(n: number): number {
   const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
@@ -59,6 +60,16 @@ export async function POST(req: Request) {
         status: 400,
         headers: { "Content-Type": "application/json" },
       },
+    );
+  }
+
+  if (text.length > MAX_TRANSCRIPT_LENGTH) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Transcript is too long. Please trim it to under 150,000 characters (approximately 2 hours of speech).",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
 
