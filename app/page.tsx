@@ -1183,7 +1183,7 @@ useEffect(() => {
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/70" />
             Early access — still in development.{" "}
             <a
-              href="https://tally.so/r/wkJPlj"
+              href="https://tally.so/r/VL14Rg"
               target="_blank"
               rel="noopener noreferrer"
               className="underline decoration-amber-400/30 underline-offset-2 hover:text-amber-200 transition-colors"
@@ -1598,7 +1598,7 @@ useEffect(() => {
               </a>
             </div>
             <a
-              href="https://tally.so/r/wkJPlj"
+              href="https://tally.so/r/VL14Rg"
               className="inline-flex py-1 text-xs font-bold text-[#0B6ED0] hover:text-white transition-colors underline decoration-[#0B6ED0]/30 underline-offset-4"
             >
               Share Feedback
