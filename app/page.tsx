@@ -1178,6 +1178,20 @@ useEffect(() => {
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
             Sermon Intelligence
           </h1>
+
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/5 px-3.5 py-1.5 text-[11px] font-semibold text-amber-300/80">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/70" />
+            Early access — still in development.{" "}
+            <a
+              href="https://tally.so/r/wkJPlj"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline decoration-amber-400/30 underline-offset-2 hover:text-amber-200 transition-colors"
+            >
+              Send me feedback
+            </a>
+          </div>
+
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-zinc-400 font-medium">
             Generate a description, YouTube chapters, and social media clips from your sermon transcript.
           </p>
