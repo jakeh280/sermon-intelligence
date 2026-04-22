@@ -760,8 +760,8 @@ function HistoryModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-zinc-950 border border-white/10 rounded-2xl shadow-3xl overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+      <div className="relative w-full max-w-md bg-zinc-950 border border-white/10 rounded-2xl shadow-3xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between p-4 border-b border-white/5">
           <h3 className="text-base font-bold text-white flex items-center gap-2">
             <History className="size-4" />
