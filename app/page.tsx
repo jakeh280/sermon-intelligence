@@ -1578,6 +1578,18 @@ useEffect(() => {
               <li>
                 <span className="font-semibold text-zinc-300">Overflow Creative</span> does not collect, store, or transmit any of your data. Nothing you enter here is saved by us.
               </li>
+              <li>
+                <span className="font-semibold text-zinc-300">Google Analytics</span> is used to measure aggregate site usage (page views, sessions). No personal or sermon data is included. See Google&apos;s{" "}
+                <a
+                  href="https://policies.google.com/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#0B6ED0] underline underline-offset-2"
+                >
+                  privacy policy
+                </a>
+                .
+              </li>
             </ul>
           </div>
         </div>
