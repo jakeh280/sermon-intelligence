@@ -1590,6 +1590,18 @@ useEffect(() => {
                 </a>
                 .
               </li>
+              <li>
+                <span className="font-semibold text-zinc-300">Microsoft Clarity</span> is used to understand how visitors interact with the site (heatmaps, session recordings). No personal or sermon data is included. See Microsoft&apos;s{" "}
+                <a
+                  href="https://privacy.microsoft.com/privacystatement"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#0B6ED0] underline underline-offset-2"
+                >
+                  privacy statement
+                </a>
+                .
+              </li>
             </ul>
           </div>
         </div>
