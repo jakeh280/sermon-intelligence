@@ -16,8 +16,6 @@ import type { ComponentProps, CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CreateMLCEngine } from "@mlc-ai/web-llm";
-import { buildSystemPrompt } from "@/lib/systemPrompt";
 
 const ACCENT = "#0B6ED0";
 const ACCEPTED = new Set([".txt", ".srt"]);
@@ -838,17 +836,10 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [modelSwitchNotice, setModelSwitchNotice] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-  const [webGpuAvailable, setWebGpuAvailable] = useState(false);
-  const [engineChoice, setEngineChoice] = useState<"local" | "cloud">("cloud");
-
-  // WebLLM State
-  const [isInitializingEngine, setIsInitializingEngine] = useState(false);
-  const [engineProgress, setEngineProgress] = useState(0);
 
   // Load history on mount
 useEffect(() => {
@@ -859,10 +850,6 @@ useEffect(() => {
     } catch (e) {
       console.error("Failed to load history", e);
     }
-  }
-
-  if (typeof navigator !== "undefined" && (navigator as any).gpu) {
-    setWebGpuAvailable(true);
   }
 }, []);
 
@@ -922,52 +909,6 @@ useEffect(() => {
 
   const streamChatResponse = useCallback(
     async (text: string, minSec: number, maxSec: number, label: string) => {
-      // 1. Try local WebGPU execution if supported
-      if (engineChoice === "local" && typeof navigator !== "undefined" && (navigator as any).gpu) {
-        try {
-          setIsInitializingEngine(true);
-          const engine = await CreateMLCEngine("Phi-3-mini-4k-instruct-q4f16_1-MLC", {
-            initProgressCallback: (p) => {
-              setEngineProgress(p.progress * 100);
-            },
-          });
-          setIsInitializingEngine(false);
-
-          const systemMessage = buildSystemPrompt(minSec, maxSec);
-          const chunks = await engine.chat.completions.create({
-            messages: [
-              { role: "system", content: systemMessage },
-              { role: "user", content: `Transcript content:\n\n${text}` },
-            ],
-            stream: true,
-            temperature: 0.7,
-          });
-
-          let accumulated = "";
-          for await (const chunk of chunks) {
-             const content = chunk.choices[0]?.delta?.content;
-             if (content) {
-                 accumulated += content;
-                 setOutput(accumulated);
-             }
-          }
-          saveToHistory(label, accumulated, minSec, maxSec);
-          return; // Local completion succeeded!
-        } catch (err) {
-          setIsInitializingEngine(false);
-          let errorMessage = err instanceof Error ? err.message : String(err);
-          if (errorMessage.includes("context window size") || errorMessage.includes("tokens exceed") || errorMessage.includes("model limit")) {
-            setEngineChoice("cloud");
-            setModelSwitchNotice(true);
-            setTimeout(() => setModelSwitchNotice(false), 6000);
-            // Falls through to Cloud AI
-          } else {
-            throw new Error(`Local inference failed: ${errorMessage}. Switch to Cloud AI and try again.`);
-          }
-        }
-      }
-
-      // 2. Server API fallback processing
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1006,7 +947,7 @@ useEffect(() => {
       setOutput(accumulated);
       saveToHistory(label, accumulated, minSec, maxSec);
     },
-    [saveToHistory, engineChoice],
+    [saveToHistory],
   );
 
   const runWithText = useCallback(
@@ -1145,20 +1086,6 @@ useEffect(() => {
       </div>
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 pb-16 pt-12 sm:pt-16 lg:px-8">
-        {/* Model Switch Notice Toast */}
-        {modelSwitchNotice && (
-          <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-500">
-            <div className="flex items-center gap-3 rounded-full border border-[#0B6ED0]/30 bg-black/80 px-5 py-3 shadow-[0_0_20px_rgba(11,110,208,0.3)] backdrop-blur-xl">
-              <div className="flex size-6 items-center justify-center rounded-full bg-[#0B6ED0]/20">
-                <Info className="size-3.5 text-[#7EB8F0]" />
-              </div>
-              <p className="text-sm font-semibold text-white/90">
-                Transcript too large for local model. <span className="text-[#7EB8F0]">Switching to Cloud AI!</span>
-              </p>
-            </div>
-          </div>
-        )}
-
         <header className="mb-12 lg:mb-16">
           <div className="flex items-center justify-between mb-4">
             <a
@@ -1345,41 +1272,15 @@ useEffect(() => {
                   </div>
 
                   <div className="flex flex-col justify-center gap-3 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
-                    {webGpuAvailable ? (
-                      <>
-                        <div className="flex text-[10px] font-bold uppercase tracking-widest text-center bg-transparent">
-                          <button
-                            type="button"
-                            onClick={() => setEngineChoice("local")}
-                            className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all ${engineChoice === "local" ? "bg-[#0B6ED0] text-white shadow-[0_0_15px_rgba(11,110,208,0.3)]" : "text-zinc-500 hover:text-zinc-300"}`}
-                          >
-                            Local Device
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEngineChoice("cloud")}
-                            className={`cursor-pointer flex-1 rounded-2xl py-3 px-2 transition-all border border-transparent ${engineChoice === "cloud" ? "!border-[#0B6ED0] text-[#7EB8F0] bg-[#0B6ED0]/10 shadow-[0_0_15px_rgba(11,110,208,0.15)]" : "text-zinc-500 hover:text-zinc-300"}`}
-                          >
-                            Cloud AI
-                          </button>
-                        </div>
-                        <div className="px-2 pt-1 text-center text-xs text-zinc-400 leading-tight font-medium">
-                          {engineChoice === "local"
-                            ? "Runs on your device • Unlimited • Smaller model"
-                            : "Smarter • Unlimited length • Limited free uses per hour"}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-center space-y-1">
-                        <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
-                        <p className="text-xs text-zinc-500 leading-relaxed">
-                          Smarter results • Handles any length transcript
-                        </p>
-                        <p className="text-[10px] text-zinc-600 font-medium">
-                          Limited free uses per hour
-                        </p>
-                      </div>
-                    )}
+                    <div className="text-center space-y-1">
+                      <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
+                      <p className="text-xs text-zinc-500 leading-relaxed">
+                        Smarter results • Handles any length transcript
+                      </p>
+                      <p className="text-[10px] text-zinc-600 font-medium">
+                        Limited free uses per hour
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -1413,45 +1314,18 @@ useEffect(() => {
               aria-live="polite"
               aria-busy="true"
             >
-              {isInitializingEngine ? (
-                <div className="w-full max-w-sm mx-auto space-y-6">
-                  <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="size-10 animate-spin text-[#0B6ED0]" strokeWidth={2} />
-                    <p className="text-xl font-bold text-white tracking-tight">
-                      Downloading Required Resources...
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full bg-[#0B6ED0] transition-all duration-300 shadow-[0_0_12px_rgba(11,110,208,0.8)]"
-                        style={{ width: `${Math.max(0, Math.min(100, engineProgress))}%` }}
-                      />
-                    </div>
-                    <p className="text-xs text-[#7EB8F0] font-mono text-center tracking-widest font-bold">
-                      {Math.round(engineProgress)}%
-                    </p>
-                  </div>
-                  <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest text-center mt-4">
-                    This only happens once
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <div className="absolute inset-0 size-16 bg-[#0B6ED0] blur-2xl opacity-20 animate-pulse" />
-                    <Loader2 className="size-16 animate-spin text-[#0B6ED0]" strokeWidth={1.5} />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xl font-bold text-white tracking-tight">
-                      Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
-                    </p>
-                    <p className="text-sm text-zinc-500 font-medium">
-                      Designing your digital strategy. This takes a few moments.
-                    </p>
-                  </div>
-                </>
-              )}
+              <div className="relative">
+                <div className="absolute inset-0 size-16 bg-[#0B6ED0] blur-2xl opacity-20 animate-pulse" />
+                <Loader2 className="size-16 animate-spin text-[#0B6ED0]" strokeWidth={1.5} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xl font-bold text-white tracking-tight">
+                  Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
+                </p>
+                <p className="text-sm text-zinc-500 font-medium">
+                  Designing your digital strategy. This takes a few moments.
+                </p>
+              </div>
             </div>
           )}
 

@@ -14,7 +14,7 @@ Sermon Intelligence is a free web app for church media directors that analyzes s
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
 - **AI SDK:** Vercel AI SDK (`ai` ^6.x) with `@ai-sdk/google` provider
-- **AI Models:** Gemini API (primary), WebLLM / Phi-3-mini (local fallback via WebGPU)
+- **AI Models:** Gemini 2.5 Flash Lite via Google Generative AI API
 - **Deployment:** GitHub + Vercel auto-deploy
 
 ---
@@ -39,14 +39,6 @@ const google = createGoogleGenerativeAI({
 const model = google("gemini-2.5-flash-lite"); // CORRECT
 // const model = google("gemini-2.0-flash");    // DO NOT USE
 ```
-
-### Local Fallback: WebLLM + Phi-3-mini
-
-For offline/low-latency processing on supported devices (WebGPU):
-- Model: `Phi-3-mini-4k-instruct-q4f16_1-MLC`
-- Uses device GPU when available via `@mlc-ai/web-llm`
-- Gracefully falls back to Cloud AI if transcript exceeds context window or GPU unavailable
-- Download happens once per browser session (~500MB+)
 
 ---
 
@@ -131,15 +123,6 @@ All cards:
 Cannot fetch live YouTube transcripts from Vercel (requests are blocked). Feature permanently removed.
 
 **Workaround:** Users must supply a transcript manually or via a tool like [Transcrisper](https://transcrisper.com/).
-
-### WebGPU Availability
-
-Local model requires:
-- Chrome 113+ / Edge 113+ with WebGPU support
-- Compatible GPU
-- ~500MB+ free storage for first-time download
-
-If unavailable, app auto-falls back to Cloud AI with a user notification.
 
 ---
 
@@ -249,12 +232,6 @@ If app loads then returns to homepage with no errors:
 - Check system prompt hasn't changed the output format
 - Test with `parseClipOptions()` in browser console
 
-### Local WebGPU Inference Fails
-- Check browser console for engine init errors
-- Verify `navigator.gpu` exists
-- If transcript is too long, model errors and auto-falls back to Cloud
-- First download takes 2–3 minutes on slower connections
-
 ---
 
 ## Quick Reference: Common Tasks
@@ -266,7 +243,7 @@ If app loads then returns to homepage with no errors:
 
 ### Update System Prompt
 1. Edit `lib/systemPrompt.ts`
-2. Ensure both server and client still use `gemini-2.5-flash-lite`
+2. Ensure server still uses `gemini-2.5-flash-lite`
 3. Test with a real transcript locally, then deploy to Vercel
 
 ### Add a New Input Format
@@ -291,5 +268,5 @@ If app loads then returns to homepage with no errors:
 
 ---
 
-**Last Updated:** 2026-04-26
+**Last Updated:** 2026-04-28
 **Status:** Active maintenance, occasional feature additions
