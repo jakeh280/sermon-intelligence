@@ -1110,6 +1110,11 @@ useEffect(() => {
           ? "Please paste a transcript before generating."
           : "Please upload a .txt or .srt file before generating.",
       );
+      if (inputMode === "paste") {
+        document.getElementById("paste-input")?.focus();
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
       return;
     }
     const label =
@@ -1319,6 +1324,7 @@ useEffect(() => {
                 </div>
               ) : (
                 <textarea
+                  id="paste-input"
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
                   rows={10}
@@ -1378,6 +1384,14 @@ useEffect(() => {
                 </div>
 
                 <div className="flex flex-col gap-4">
+                  {status === "error" && errorMessage && (
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-4 text-center animate-in shake duration-500">
+                      <p className="text-sm font-bold text-red-200/90 flex items-center justify-center gap-2">
+                        <X className="size-4" />
+                        {errorMessage}
+                      </p>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => void handleGenerate()}
@@ -1441,14 +1455,7 @@ useEffect(() => {
             </div>
           )}
 
-          {status === "error" && errorMessage && (
-            <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-4 text-center animate-in shake duration-500">
-              <p className="text-sm font-bold text-red-200/90 flex items-center justify-center gap-2">
-                <X className="size-4" />
-                {errorMessage}
-              </p>
-            </div>
-          )}
+
 
           {showBento && (
             <div className="space-y-6 pt-8 border-t border-white/5">
