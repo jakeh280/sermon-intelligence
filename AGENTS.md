@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Sermon Intelligence is a free web app for church media directors that analyzes sermon transcripts and generates YouTube metadata (titles, descriptions, chapter markers) and social media clip suggestions.
 
-- **Framework:** Next.js 16.2.2 + React 19 + TypeScript
+- **Framework:** Next.js 16.2.9 + React 19 + TypeScript
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
 - **AI SDK:** Vercel AI SDK (`ai` ^6.x) with `@ai-sdk/google` provider
@@ -268,5 +268,5 @@ If app loads then returns to homepage with no errors:
 
 ---
 
-**Last Updated:** 2026-04-28
+**Last Updated:** 2026-06-23
 **Status:** Active maintenance, occasional feature additions
