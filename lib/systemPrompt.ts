@@ -51,6 +51,7 @@ Bad Examples (Too granular/Generic):
 
 ### Clips
 Identify 3 stand-alone moments.
+STRICT DURATION RULE: Each clip's duration MUST fall strictly between ${clipMinSec} and ${clipMaxSec} seconds. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.
 STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
 METADATA ANCHOR RULE: Before generating a clip, locate the tag immediately preceding the first word of your quote. You MUST use the timestamp associated with that tag. 
 STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.
