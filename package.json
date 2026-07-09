@@ -9,11 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.60",
-    "@next/third-parties": "^16.2.4",
-    "ai": "^6.0.152",
-    "lucide-react": "^1.7.0",
-    "next": "^16.2.9",
+    "@ai-sdk/google": "^4.0.10",
+    "@next/third-parties": "^16.2.10",
+    "ai": "^7.0.18",
+    "lucide-react": "^1.23.0",
+    "next": "^16.2.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
