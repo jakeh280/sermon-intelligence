@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -837,21 +837,19 @@ export default function Home() {
   const [limitNotice, setLimitNotice] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showDisclaimer, setShowDisclaimer] = useState(false);
-
-  // Load history on mount
-useEffect(() => {
-  const saved = localStorage.getItem("sermon_history");
-  if (saved) {
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    const saved = localStorage.getItem("sermon_history");
+    if (!saved) return [];
     try {
-      setHistory(JSON.parse(saved));
+      return JSON.parse(saved);
     } catch (e) {
       console.error("Failed to load history", e);
+      return [];
     }
-  }
-}, []);
+  });
+  const [showHistory, setShowHistory] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   // Save history helper
   const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
