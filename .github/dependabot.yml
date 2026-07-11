@@ -13,6 +13,16 @@ updates:
         dependency-type: production
       development-dependencies:
         dependency-type: development
+    ignore:
+      # TypeScript 7 ships native per-platform binaries as optionalDependencies;
+      # Next.js 16.2.10's typescript-detection can't find the package under the
+      # new layout, failing "next build" with a false "typescript not installed" error.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # eslint-config-next's bundled eslint-plugin-react peer-depends on eslint <=9.7,
+      # so eslint 10 crashes "next lint" with a TypeError in react/display-name.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
