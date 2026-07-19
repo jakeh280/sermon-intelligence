@@ -1,0 +1,28 @@
+Sitemap: https://sermonintelligence.com/sitemap.xml
+
+# Policy mirrors overflowcreative.net: model training blocked, retrieval and
+# answer engines allowed. The Anthropic identifiers below are the current ones;
+# the older "anthropic-ai" and "Claude-Web" names match no live crawler.
+
+# Training crawlers: blocked
+User-agent: GPTBot
+User-agent: CCBot
+User-agent: ClaudeBot
+User-agent: Applebot-Extended
+User-agent: meta-externalagent
+Disallow: /
+
+# Retrieval and answer engines: allowed
+User-agent: Claude-User
+User-agent: Claude-SearchBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: PerplexityBot
+User-agent: Google-Extended
+Allow: /
+
+# The chat endpoint is not a page; keep it out of the index.
+User-agent: *
+Allow: /
+Disallow: /api/
+Content-Signal: ai-train=no, search=yes, ai-input=yes
