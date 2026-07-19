@@ -17,6 +17,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { track } from "@/lib/analytics";
+
 const ACCENT = "#0B6ED0";
 const ACCEPTED = new Set([".txt", ".srt"]);
 
@@ -961,21 +963,32 @@ export default function Home() {
       setLimitNotice(false);
       setStatus("loading");
 
+      const startedAt = Date.now();
+      track("sermon_generate", { input_chars: text.length });
+
       try {
         await streamChatResponse(text, minSec, maxSec, label);
         setLimitNotice(false);
         setStatus("idle");
+        track("sermon_generate_success", {
+          input_chars: text.length,
+          seconds: Math.round((Date.now() - startedAt) / 1000),
+        });
       } catch (e) {
         if (isAiLimitError(e)) {
           setLimitNotice(true);
           setErrorMessage(null);
           setStatus("idle");
+          track("sermon_rate_limited");
           return;
         }
         setStatus("error");
         setErrorMessage(
           e instanceof Error ? e.message : "Something went wrong",
         );
+        track("sermon_generate_error", {
+          message: e instanceof Error ? e.message.slice(0, 80) : "unknown",
+        });
       }
     },
     [streamChatResponse],
