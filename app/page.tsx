@@ -1274,7 +1274,7 @@ export default function Home() {
                   onChange={(e) => setPastedText(e.target.value)}
                   rows={10}
                   placeholder="Paste your verbatim sermon transcript content here..."
-                  className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-600 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
+                  className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-400 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
                 />
               )}
 
@@ -1295,7 +1295,7 @@ export default function Home() {
                       <p className="text-xs text-zinc-400 leading-relaxed">
                         Smarter results • Handles any length transcript
                       </p>
-                      <p className="text-[10px] text-zinc-600 font-medium">
+                      <p className="text-[10px] text-zinc-400 font-medium">
                         Limited free uses per hour
                       </p>
                     </div>
@@ -1318,7 +1318,7 @@ export default function Home() {
                   >
                     Generate
                   </button>
-                  <p className="px-4 text-center text-[10px] leading-relaxed text-zinc-600 font-bold uppercase tracking-wider">
+                  <p className="px-4 text-center text-[10px] leading-relaxed text-zinc-400 font-bold uppercase tracking-wider">
                     {COMMUNITY_DISCLAIMER}
                   </p>
                 </div>
@@ -1468,7 +1468,7 @@ export default function Home() {
                   href="https://policies.google.com/terms"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#0B6ED0] underline underline-offset-2"
+                  className="text-[#3B93E8] underline underline-offset-2"
                 >
                   terms of service
                 </a>
@@ -1483,7 +1483,7 @@ export default function Home() {
                   href="https://policies.google.com/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#0B6ED0] underline underline-offset-2"
+                  className="text-[#3B93E8] underline underline-offset-2"
                 >
                   privacy policy
                 </a>
@@ -1495,7 +1495,7 @@ export default function Home() {
                   href="https://privacy.microsoft.com/privacystatement"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#0B6ED0] underline underline-offset-2"
+                  className="text-[#3B93E8] underline underline-offset-2"
                 >
                   privacy statement
                 </a>
@@ -1515,14 +1515,14 @@ export default function Home() {
                 href="https://overflowcreative.net"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-lg font-bold text-white hover:text-[#0B6ED0] transition-colors"
+                className="text-lg font-bold text-white hover:text-[#3B93E8] transition-colors"
               >
                 Overflow Creative
               </a>
             </div>
             <a
               href="https://tally.so/r/VL14Rg"
-              className="inline-flex py-1 text-xs font-bold text-[#0B6ED0] hover:text-white transition-colors underline decoration-[#0B6ED0]/30 underline-offset-4"
+              className="inline-flex py-1 text-xs font-bold text-[#3B93E8] hover:text-white transition-colors underline decoration-[#3B93E8]/40 underline-offset-4"
             >
               Share Feedback
             </a>
@@ -1546,12 +1546,12 @@ export default function Home() {
           </div>
         </div>
         <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between">
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em]">
+          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.3em]">
             © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
           </p>
           <button
             onClick={() => setShowDisclaimer(true)}
-            className="text-[10px] text-zinc-600 font-bold uppercase tracking-[0.3em] hover:text-zinc-400 transition-colors"
+            className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.3em] hover:text-zinc-400 transition-colors"
           >
             Disclaimers
           </button>
