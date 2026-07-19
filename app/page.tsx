@@ -19,7 +19,13 @@ import remarkGfm from "remark-gfm";
 
 import { track } from "@/lib/analytics";
 
+// Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
+// sits on top and contrast already passes comfortably.
 const ACCENT = "#0B6ED0";
+// For accent-coloured TEXT on the dark background, use #3B93E8 instead. ACCENT
+// as text measures 3.79:1, under the WCAG 4.5:1 minimum; #3B93E8 measures 5.96:1.
+// It appears as a literal in Tailwind classes rather than a constant, because
+// arbitrary values have to be statically visible to the Tailwind compiler.
 const ACCEPTED = new Set([".txt", ".srt"]);
 
 const COMMUNITY_DISCLAIMER =
@@ -208,7 +214,7 @@ const markdownComponents: NonNullable<
   a: ({ href, children, ...props }) => (
     <a
       href={href}
-      className="font-medium underline decoration-[#0B6ED0]/50 underline-offset-2 transition-colors hover:text-[#0B6ED0]"
+      className="font-medium underline decoration-[#0B6ED0]/50 underline-offset-2 transition-colors hover:text-[#3B93E8]"
       target="_blank"
       rel="noopener noreferrer"
       {...props}
@@ -370,7 +376,7 @@ function BentoCard({
         </h2>
         <div className="flex items-center gap-3">
           {streaming && !body && (
-            <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
+            <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
           )}
           {body && !streaming && (
             <button
@@ -462,7 +468,7 @@ function TitlesBentoCard({
         </h2>
         <div className="flex items-center gap-3">
           {streaming && !body && (
-            <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
+            <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
           )}
           {body && !streaming && (
             <button
@@ -522,7 +528,7 @@ function DualClipRangeSlider({
         <span className="font-medium tabular-nums text-[#7EB8F0]">
           {formatDurationSec(clipMinSec)}
         </span>
-        <span className="text-[10px] uppercase tracking-widest text-zinc-500 font-bold">
+        <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">
           Clip Target Duration
         </span>
         <span className="font-medium tabular-nums text-[#7EB8F0]">
@@ -556,7 +562,7 @@ function DualClipRangeSlider({
           onTouchEnd={() => setActiveThumb(null)}
           onChange={(e) => onMinChange(Number(e.target.value))}
           className={[
-            "absolute inset-x-0 top-1/2 h-3 w-full -translate-y-1/2 appearance-none bg-transparent",
+            "absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 appearance-none bg-transparent",
             "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
             rangeThumbTw,
             activeThumb === "min" ? "z-30" : "z-20",
@@ -577,7 +583,7 @@ function DualClipRangeSlider({
           onTouchEnd={() => setActiveThumb(null)}
           onChange={(e) => onMaxChange(Number(e.target.value))}
           className={[
-            "absolute inset-x-0 top-1/2 h-3 w-full -translate-y-1/2 appearance-none bg-transparent",
+            "absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 appearance-none bg-transparent",
             "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
             rangeThumbTw,
             activeThumb === "max" ? "z-30" : "z-10",
@@ -627,7 +633,7 @@ function ClipsBentoCard({
           {title}
         </h2>
         {streaming && !body && (
-          <span className="shrink-0 text-xs text-zinc-500 animate-pulse">Typing…</span>
+          <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
         )}
       </header>
 
@@ -645,7 +651,7 @@ function ClipsBentoCard({
               <div className="mb-3 flex flex-col gap-2 border-b border-white/5 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {clip.Duration ? (
-                    <span className="text-[10px] font-bold tabular-nums tracking-widest text-zinc-500">
+                    <span className="text-[10px] font-bold tabular-nums tracking-widest text-zinc-400">
                       {clip.Duration}
                     </span>
                   ) : null}
@@ -672,7 +678,7 @@ function ClipsBentoCard({
                 </p>
               ) : null}
               {clip["Why it works"] ? (
-                <p className="mt-auto text-sm leading-relaxed text-zinc-500 italic">
+                <p className="mt-auto text-sm leading-relaxed text-zinc-400 italic">
                   <span className="font-semibold text-zinc-400">
                     Why it works:{" "}
                   </span>
@@ -776,7 +782,7 @@ function HistoryModal({
           {items.length === 0 ? (
             <div className="py-12 text-center">
               <History className="size-10 text-zinc-800 mx-auto mb-3" />
-              <p className="text-sm text-zinc-500">No history yet.</p>
+              <p className="text-sm text-zinc-400">No history yet.</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -792,7 +798,7 @@ function HistoryModal({
                     <p className="text-sm font-semibold text-white truncate group-hover:text-[#7EB8F0] transition-colors text-left">
                       {item.label}
                     </p>
-                    <p className="text-[10px] text-zinc-500 font-mono text-left">
+                    <p className="text-[10px] text-zinc-400 font-mono text-left">
                       {new Date(item.timestamp).toLocaleString()} • {formatDurationSec(item.clipMinSec)}-{formatDurationSec(item.clipMaxSec)}
                     </p>
                   </button>
@@ -1103,7 +1109,7 @@ export default function Home() {
               href="https://overflowcreative.net"
               target="_blank"
               rel="noopener noreferrer"
-              className="group inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.4em] text-[#0B6ED0] transition-colors hover:text-white"
+              className="group inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.4em] text-[#3B93E8] transition-colors hover:text-white"
             >
               Overflow Creative
               <span className="h-px w-6 bg-[#0B6ED0]/40 transition-all group-hover:w-12 group-hover:bg-[#0B6ED0]" />
@@ -1152,7 +1158,7 @@ export default function Home() {
                 href="https://transcrisper.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-bold text-[#0B6ED0] hover:text-[#3d8fe8] underline decoration-[#0B6ED0]/30 underline-offset-4"
+                className="font-bold text-[#3B93E8] hover:text-[#7DBEF7] underline decoration-[#3B93E8]/40 underline-offset-4"
               >
                 Transcrisper
               </a>{" "}
@@ -1185,7 +1191,7 @@ export default function Home() {
                       "cursor-pointer rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "upload"
                         ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
-                        : "bg-transparent text-zinc-500 hover:text-white",
+                        : "bg-transparent text-zinc-400 hover:text-white",
                     ].join(" ")}
                     aria-pressed={inputMode === "upload"}
                   >
@@ -1198,7 +1204,7 @@ export default function Home() {
                       "cursor-pointer rounded-xl px-6 py-2.5 text-xs font-bold uppercase tracking-widest transition-all",
                       inputMode === "paste"
                         ? "bg-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20"
-                        : "bg-transparent text-zinc-500 hover:text-white",
+                        : "bg-transparent text-zinc-400 hover:text-white",
                     ].join(" ")}
                     aria-pressed={inputMode === "paste"}
                   >
@@ -1234,6 +1240,7 @@ export default function Home() {
                       ref={inputRef}
                       type="file"
                       accept=".txt,.srt,text/plain"
+                      aria-label="Upload a sermon transcript, .txt or .srt"
                       className="sr-only"
                       onChange={(e) => {
                         const f = e.target.files;
@@ -1248,7 +1255,7 @@ export default function Home() {
                       <p className="text-lg font-bold text-white tracking-tight">
                         Drop your transcript here
                       </p>
-                      <p className="mt-2 text-sm text-zinc-500 font-medium">
+                      <p className="mt-2 text-sm text-zinc-400 font-medium">
                         Supports <span className="text-zinc-300">.txt</span> or <span className="text-zinc-300">.srt</span> files
                       </p>
                     </div>
@@ -1285,7 +1292,7 @@ export default function Home() {
                   <div className="flex flex-col justify-center gap-3 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
                     <div className="text-center space-y-1">
                       <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
-                      <p className="text-xs text-zinc-500 leading-relaxed">
+                      <p className="text-xs text-zinc-400 leading-relaxed">
                         Smarter results • Handles any length transcript
                       </p>
                       <p className="text-[10px] text-zinc-600 font-medium">
@@ -1333,7 +1340,7 @@ export default function Home() {
                 <p className="text-xl font-bold text-white tracking-tight">
                   Processing: <span className="text-[#7EB8F0]">{processingLabel}</span>
                 </p>
-                <p className="text-sm text-zinc-500 font-medium">
+                <p className="text-sm text-zinc-400 font-medium">
                   Designing your digital strategy. This takes a few moments.
                 </p>
               </div>
@@ -1346,7 +1353,7 @@ export default function Home() {
             <div className="space-y-6 pt-8 border-t border-white/5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-500 mb-1">
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-400 mb-1">
                     Strategy Output
                   </h2>
                   <p className="text-xs text-zinc-400 font-medium">
@@ -1414,7 +1421,7 @@ export default function Home() {
                 ) : (
                   <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
                     <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
-                    <p className="text-sm text-zinc-500 font-bold uppercase tracking-widest">Constructing View...</p>
+                    <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">Constructing View...</p>
                   </div>
                 )}
 
@@ -1448,7 +1455,7 @@ export default function Home() {
               <h3 className="text-sm font-bold text-white">Disclaimers</h3>
               <button
                 onClick={() => setShowDisclaimer(false)}
-                className="text-zinc-500 hover:text-white transition-colors"
+                className="text-zinc-400 hover:text-white transition-colors"
                 aria-label="Close"
               >
                 <X className="size-4" />
@@ -1503,7 +1510,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="space-y-4">
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Engineered by</p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Engineered by</p>
               <a
                 href="https://overflowcreative.net"
                 target="_blank"
