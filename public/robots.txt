@@ -1,4 +1,4 @@
-Sitemap: https://sermonintelligence.com/sitemap.xml
+Sitemap: https://www.sermonintelligence.com/sitemap.xml
 
 # Policy mirrors overflowcreative.net: model training blocked, retrieval and
 # answer engines allowed. The Anthropic identifiers below are the current ones;

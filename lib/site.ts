@@ -3,7 +3,12 @@
  * Mirrors the same pattern used in the overflowcreative repo.
  */
 
-export const SITE_URL = "https://sermonintelligence.com";
+/**
+ * The apex 307-redirects to www, so www is the real canonical host. Pointing
+ * canonicals or the sitemap at the apex sends Search Console to a redirect.
+ * Note this differs from overflowcreative.net, which serves on its apex.
+ */
+export const SITE_URL = "https://www.sermonintelligence.com";
 
 export const SITE_NAME = "Sermon Intelligence";
 
