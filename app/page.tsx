@@ -17,8 +17,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { track } from "@/lib/analytics";
-
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
 // sits on top and contrast already passes comfortably.
 const ACCENT = "#0B6ED0";
@@ -969,32 +967,21 @@ export default function Home() {
       setLimitNotice(false);
       setStatus("loading");
 
-      const startedAt = Date.now();
-      track("sermon_generate", { input_chars: text.length });
-
       try {
         await streamChatResponse(text, minSec, maxSec, label);
         setLimitNotice(false);
         setStatus("idle");
-        track("sermon_generate_success", {
-          input_chars: text.length,
-          seconds: Math.round((Date.now() - startedAt) / 1000),
-        });
       } catch (e) {
         if (isAiLimitError(e)) {
           setLimitNotice(true);
           setErrorMessage(null);
           setStatus("idle");
-          track("sermon_rate_limited");
           return;
         }
         setStatus("error");
         setErrorMessage(
           e instanceof Error ? e.message : "Something went wrong",
         );
-        track("sermon_generate_error", {
-          message: e instanceof Error ? e.message.slice(0, 80) : "unknown",
-        });
       }
     },
     [streamChatResponse],
@@ -1452,7 +1439,7 @@ export default function Home() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Disclaimers</h3>
+              <h3 className="text-sm font-bold text-white">Privacy</h3>
               <button
                 onClick={() => setShowDisclaimer(false)}
                 className="text-zinc-400 hover:text-white transition-colors"
@@ -1463,7 +1450,7 @@ export default function Home() {
             </div>
             <ul className="space-y-3 text-xs text-zinc-400 leading-relaxed">
               <li>
-                <span className="font-semibold text-zinc-300">Cloud processing</span> is handled by Google Gemini&apos;s free tier. Google may use inputs to improve their models per their{" "}
+                <span className="font-semibold text-zinc-300">Cloud processing</span> sends your transcript to Google Gemini to create the results. Only submit material you are allowed to share. Google may use inputs to improve their models per their{" "}
                 <a
                   href="https://policies.google.com/terms"
                   target="_blank"
@@ -1475,29 +1462,17 @@ export default function Home() {
                 .
               </li>
               <li>
-                <span className="font-semibold text-zinc-300">Overflow Creative</span> does not collect, store, or transmit any of your data. Nothing you enter here is saved by us.
+                <span className="font-semibold text-zinc-300">Local history</span> keeps up to 10 generated results in this browser only. You can remove them at any time from History.
               </li>
               <li>
-                <span className="font-semibold text-zinc-300">Google Analytics</span> is used to measure aggregate site usage (page views, sessions). No personal or sermon data is included. See Google&apos;s{" "}
+                <span className="font-semibold text-zinc-300">Anonymous analytics</span> uses Vercel Web Analytics to understand aggregate traffic, such as page views and referral sources. It does not use cookies or session recordings, and no transcript or generated content is sent to analytics. See Vercel&apos;s{" "}
                 <a
-                  href="https://policies.google.com/privacy"
+                  href="https://vercel.com/docs/analytics/privacy-policy"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#3B93E8] underline underline-offset-2"
                 >
-                  privacy policy
-                </a>
-                .
-              </li>
-              <li>
-                <span className="font-semibold text-zinc-300">Microsoft Clarity</span> is used to understand how visitors interact with the site (heatmaps, session recordings). No personal or sermon data is included. See Microsoft&apos;s{" "}
-                <a
-                  href="https://privacy.microsoft.com/privacystatement"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B93E8] underline underline-offset-2"
-                >
-                  privacy statement
+                  privacy information
                 </a>
                 .
               </li>
@@ -1553,7 +1528,7 @@ export default function Home() {
             onClick={() => setShowDisclaimer(true)}
             className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em] hover:text-white transition-colors"
           >
-            Disclaimers
+            Privacy
           </button>
         </div>
       </footer>
