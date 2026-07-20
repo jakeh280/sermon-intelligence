@@ -223,13 +223,13 @@ const markdownComponents: NonNullable<
     </a>
   ),
   p: ({ children, ...props }) => (
-    <p className="mb-3 text-sm leading-relaxed text-zinc-300 last:mb-0" {...props}>
+    <p className="mb-3 text-base leading-7 text-zinc-300 last:mb-0" {...props}>
       {children}
     </p>
   ),
   ul: ({ children, ...props }) => (
     <ul
-      className="mb-3 list-disc space-y-1.5 pl-5 text-sm text-zinc-300 last:mb-0"
+      className="mb-3 list-disc space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
       {...props}
     >
       {children}
@@ -237,7 +237,7 @@ const markdownComponents: NonNullable<
   ),
   ol: ({ children, ...props }) => (
     <ol
-      className="mb-3 list-decimal space-y-1.5 pl-5 text-sm text-zinc-300 last:mb-0"
+      className="mb-3 list-decimal space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
       {...props}
     >
       {children}
@@ -280,7 +280,7 @@ const markdownComponents: NonNullable<
   ),
   blockquote: ({ children, ...props }) => (
     <blockquote
-      className="mb-3 border-l-2 border-[#0B6ED0]/60 pl-3 text-sm italic text-zinc-400"
+      className="mb-3 border-l-2 border-[#0B6ED0]/60 pl-3 text-base italic leading-7 text-zinc-400"
       {...props}
     >
       {children}
@@ -381,7 +381,7 @@ function BentoCard({
           {body && !streaming && (
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
               title="Copy section"
             >
               {copied ? (
@@ -473,7 +473,7 @@ function TitlesBentoCard({
           {body && !streaming && (
             <button
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
               title="Copy section"
             >
               {copied ? (
@@ -528,7 +528,7 @@ function DualClipRangeSlider({
         <span className="font-medium tabular-nums text-[#7EB8F0]">
           {formatDurationSec(clipMinSec)}
         </span>
-        <span className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">
+        <span className="text-xs uppercase tracking-[0.14em] text-zinc-400 font-semibold">
           Clip Target Duration
         </span>
         <span className="font-medium tabular-nums text-[#7EB8F0]">
@@ -638,7 +638,7 @@ function ClipsBentoCard({
       </header>
 
       {preamble ? (
-        <p className="mb-6 text-sm leading-relaxed text-zinc-400">{preamble}</p>
+        <p className="mb-6 max-w-3xl text-base leading-7 text-zinc-400">{preamble}</p>
       ) : null}
 
       {showClipGrid ? (
@@ -651,7 +651,7 @@ function ClipsBentoCard({
               <div className="mb-3 flex flex-col gap-2 border-b border-white/5 pb-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {clip.Duration ? (
-                    <span className="text-[10px] font-bold tabular-nums tracking-widest text-zinc-400">
+                    <span className="text-xs font-semibold tabular-nums tracking-widest text-zinc-400">
                       {clip.Duration}
                     </span>
                   ) : null}
@@ -668,17 +668,17 @@ function ClipsBentoCard({
                 ) : null}
               </div>
               {clip.Transcript ? (
-                <blockquote className="mb-4 grow border-l-2 border-[#0B6ED0]/30 pl-3 text-sm italic leading-relaxed text-zinc-400">
+                <blockquote className="mb-4 grow border-l-2 border-[#0B6ED0]/30 pl-3 text-base italic leading-7 text-zinc-400">
                   {clip.Transcript}
                 </blockquote>
               ) : null}
               {clip.Description ? (
-                <p className="mb-3 text-sm leading-relaxed text-zinc-300">
+                <p className="mb-3 text-base leading-7 text-zinc-300">
                   {clip.Description}
                 </p>
               ) : null}
               {clip["Why it works"] ? (
-                <p className="mt-auto text-sm leading-relaxed text-zinc-400 italic">
+                <p className="mt-auto text-base leading-7 text-zinc-400 italic">
                   <span className="font-semibold text-zinc-400">
                     Why it works:{" "}
                   </span>
@@ -720,7 +720,7 @@ function PromoCard({ className }: { className?: string } = {}) {
         aria-hidden
       />
       <div className="relative">
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#7EB8F0]/80">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7EB8F0]/80">
           Overflow Creative
         </p>
         <p className="mt-2 max-w-xl text-lg font-bold tracking-tight text-white sm:text-2xl">
@@ -798,7 +798,7 @@ function HistoryModal({
                     <p className="text-sm font-semibold text-white truncate group-hover:text-[#7EB8F0] transition-colors text-left">
                       {item.label}
                     </p>
-                    <p className="text-[10px] text-zinc-400 font-mono text-left">
+                    <p className="text-xs text-zinc-400 font-mono text-left">
                       {new Date(item.timestamp).toLocaleString()} • {formatDurationSec(item.clipMinSec)}-{formatDurationSec(item.clipMaxSec)}
                     </p>
                   </button>
@@ -1095,7 +1095,7 @@ export default function Home() {
   const streaming = status === "loading";
 
   return (
-    <main className="flex min-h-full flex-col bg-[#020202] text-zinc-100 font-sans selection:bg-[#0B6ED0]/30 selection:text-white">
+    <main className="flex min-h-full flex-col bg-zinc-950 text-zinc-100 font-sans selection:bg-[#0B6ED0]/30 selection:text-white">
       {/* Background Glow */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
         <div className="absolute -top-[15%] -left-[10%] w-[50%] h-[50%] bg-[#0B6ED0]/10 rounded-full blur-[120px]" />
@@ -1109,7 +1109,7 @@ export default function Home() {
               href="https://overflowcreative.net"
               target="_blank"
               rel="noopener noreferrer"
-              className="group inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.4em] text-[#3B93E8] transition-colors hover:text-white"
+              className="group inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#3B93E8] transition-colors hover:text-white"
             >
               Overflow Creative
               <span className="h-px w-6 bg-[#0B6ED0]/40 transition-all group-hover:w-12 group-hover:bg-[#0B6ED0]" />
@@ -1117,20 +1117,20 @@ export default function Home() {
 
             <button
               onClick={() => setShowHistory(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-[11px] font-bold text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
             >
               <History className="size-3.5" />
               History
             </button>
           </div>
 
-          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl bg-gradient-to-b from-white to-white/60 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl">
             Sermon Intelligence
           </h1>
 
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/5 px-3.5 py-1.5 text-[11px] font-semibold text-amber-300/80">
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/5 px-3.5 py-1.5 text-xs font-semibold text-amber-300/80">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/70" />
-            Early access — still in development.{" "}
+            Early access, still in development.{" "}
             <a
               href="https://tally.so/r/VL14Rg"
               target="_blank"
@@ -1152,7 +1152,7 @@ export default function Home() {
             <div className="bg-[#0B6ED0]/10 p-2 rounded-xl shrink-0 h-fit">
               <Info className="size-5 text-[#5A9FE8]" aria-hidden />
             </div>
-            <p className="text-sm leading-relaxed text-zinc-400">
+            <p className="text-base leading-7 text-zinc-400">
               <span className="text-white font-semibold"></span> Only have audio or video? Use a tool like{" "}
               <a
                 href="https://transcrisper.com/"
@@ -1263,7 +1263,7 @@ export default function Home() {
                   {fileName && (
                     <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10">
                       <Check className="size-3 text-emerald-400" />
-                      <span className="text-[10px] font-bold text-white/90 truncate max-w-[200px]">{fileName}</span>
+                      <span className="text-xs font-semibold text-white/90 truncate max-w-[200px]">{fileName}</span>
                     </div>
                   )}
                 </div>
@@ -1274,7 +1274,7 @@ export default function Home() {
                   onChange={(e) => setPastedText(e.target.value)}
                   rows={10}
                   placeholder="Paste your verbatim sermon transcript content here..."
-                  className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-sm leading-relaxed text-zinc-200 placeholder:text-zinc-400 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
+                  className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-base leading-7 text-zinc-200 placeholder:text-zinc-400 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
                 />
               )}
 
@@ -1295,7 +1295,7 @@ export default function Home() {
                       <p className="text-xs text-zinc-400 leading-relaxed">
                         Smarter results • Handles any length transcript
                       </p>
-                      <p className="text-[10px] text-zinc-400 font-medium">
+                      <p className="text-xs text-zinc-400 font-medium">
                         Limited free uses per hour
                       </p>
                     </div>
@@ -1318,7 +1318,7 @@ export default function Home() {
                   >
                     Generate
                   </button>
-                  <p className="px-4 text-center text-[10px] leading-relaxed text-zinc-400 font-bold uppercase tracking-wider">
+                  <p className="px-4 text-center text-xs leading-relaxed text-zinc-400 font-semibold uppercase tracking-[0.12em]">
                     {COMMUNITY_DISCLAIMER}
                   </p>
                 </div>
@@ -1353,7 +1353,7 @@ export default function Home() {
             <div className="space-y-6 pt-8 border-t border-white/5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-zinc-400 mb-1">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 mb-1">
                     Strategy Output
                   </h2>
                   <p className="text-xs text-zinc-400 font-medium">
@@ -1546,12 +1546,12 @@ export default function Home() {
           </div>
         </div>
         <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between">
-          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.3em]">
+          <p className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em]">
             © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
           </p>
           <button
             onClick={() => setShowDisclaimer(true)}
-            className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.3em] hover:text-zinc-400 transition-colors"
+            className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em] hover:text-white transition-colors"
           >
             Disclaimers
           </button>
