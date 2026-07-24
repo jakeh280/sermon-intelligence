@@ -14,14 +14,16 @@ Sermon Intelligence is a free web app for church media directors that analyzes s
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
 - **AI SDK:** Vercel AI SDK (`ai` ^6.x) with `@ai-sdk/google` provider
-- **AI Models:** Gemini 2.5 Flash Lite via Google Generative AI API
+- **AI Models:** Gemini 3.5 Flash Lite via Google Generative AI API
 - **Deployment:** GitHub + Vercel auto-deploy
 
 ---
 
 ## Critical Model Selection Rules
 
-### Primary Model: `gemini-2.5-flash-lite` (REQUIRED)
+### Primary Model: `gemini-3.5-flash-lite` (REQUIRED)
+
+Raised from `gemini-2.5-flash-lite` on 2026-07-24 — 2.5 remains stable but 3.5 Flash-Lite (released 2026-07-21) is the current cheapest/fastest tier for this workload.
 
 **DO NOT use `gemini-2.0-flash`** — it causes silent failures on this project:
 - App loads normally
@@ -36,7 +38,7 @@ const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
 
-const model = google("gemini-2.5-flash-lite"); // CORRECT
+const model = google("gemini-3.5-flash-lite"); // CORRECT
 // const model = google("gemini-2.0-flash");    // DO NOT USE
 ```
 
@@ -154,6 +156,7 @@ Uses browser `localStorage`:
 - **Platform:** Vercel free hobby tier, Node.js 18+ runtime
 - **`maxDuration = 60`** seconds for streaming responses
 - **Env var:** `GOOGLE_GENERATIVE_AI_API_KEY`
+- **Analytics:** Vercel Analytics (`@vercel/analytics`, free tier), wired via `<Analytics />` in `app/layout.tsx`. Google Analytics and Microsoft Clarity were both removed (July 2026).
 
 ```bash
 npm run dev      # Local development (port 3000)
@@ -218,7 +221,7 @@ React-Markdown with custom component overrides:
 
 ### Silent Failure (Model Issue)
 If app loads then returns to homepage with no errors:
-1. Check `app/api/chat/route.ts` model name — must be `gemini-2.5-flash-lite`
+1. Check `app/api/chat/route.ts` model name — must be `gemini-3.5-flash-lite`
 2. Verify `process.env.GOOGLE_GENERATIVE_AI_API_KEY` exists in Vercel settings
 3. Test the endpoint directly with curl/Postman
 
@@ -243,7 +246,7 @@ If app loads then returns to homepage with no errors:
 
 ### Update System Prompt
 1. Edit `lib/systemPrompt.ts`
-2. Ensure server still uses `gemini-2.5-flash-lite`
+2. Ensure server still uses `gemini-3.5-flash-lite`
 3. Test with a real transcript locally, then deploy to Vercel
 
 ### Add a New Input Format

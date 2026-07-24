@@ -83,10 +83,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Real AI Analysis with gemini-2.5-flash lite
+  // Real AI Analysis with gemini-3.5-flash-lite
   try {
     const result = streamText({
-      model: google("gemini-2.5-flash-lite"),
+      model: google("gemini-3.5-flash-lite"),
       system: buildSystemPrompt(clips.min, clips.max),
       messages: [
         {
