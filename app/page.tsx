@@ -32,6 +32,9 @@ const COMMUNITY_DISCLAIMER =
 const AI_LIMIT_NOTICE =
   "We have hit our free limit for the hour. Please try again in a few minutes.";
 
+const FULL_COPY_ATTRIBUTION =
+  "Generated with [sermonintelligence.com](https://sermonintelligence.com/)";
+
 function isAiLimitHttpStatus(status: number) {
   return status === 429 || status === 504;
 }
@@ -1029,7 +1032,9 @@ export default function Home() {
   const copyOutput = useCallback(async () => {
     if (!output.trim()) return;
     try {
-      await navigator.clipboard.writeText(output);
+      await navigator.clipboard.writeText(
+        `${output.trimEnd()}\n\n${FULL_COPY_ATTRIBUTION}`,
+      );
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -1037,6 +1042,20 @@ export default function Home() {
       setStatus("error");
     }
   }, [output]);
+
+  const analyzeAnotherSermon = useCallback(() => {
+    setOutput("");
+    setProcessingLabel("");
+    setFileName(null);
+    setUploadedText("");
+    setPastedText("");
+    setErrorMessage(null);
+    setLimitNotice(false);
+    setStatus("idle");
+    setCopied(false);
+    if (inputRef.current) inputRef.current.value = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     if (status === "loading") return;
@@ -1347,19 +1366,29 @@ export default function Home() {
                     Content derived from <span className="text-white">{processingLabel}</span>
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void copyOutput()}
-                  disabled={!output.trim()}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-xs font-bold text-white backdrop-blur-md transition-all hover:bg-white/10 disabled:opacity-30 cursor-pointer"
-                >
-                  {copied ? (
-                    <Check className="size-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                  {copied ? "Copied All" : "Copy Full Markdown"}
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={analyzeAnotherSermon}
+                    disabled={!output.trim()}
+                    className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-transparent px-5 py-2 text-xs font-bold text-zinc-300 transition-all hover:bg-white/5 hover:text-white disabled:opacity-30"
+                  >
+                    Analyze Another Sermon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyOutput()}
+                    disabled={!output.trim()}
+                    className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-xs font-bold text-white backdrop-blur-md transition-all hover:bg-white/10 disabled:opacity-30"
+                  >
+                    {copied ? (
+                      <Check className="size-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    {copied ? "Copied All" : "Copy Full Markdown"}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

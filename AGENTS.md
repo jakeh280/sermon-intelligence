@@ -116,6 +116,11 @@ All cards:
 - Animate in with `fade-in slide-in-from-bottom`
 - Support full Markdown formatting
 
+The full-output copy action appends a single attribution line linking to
+`https://sermonintelligence.com/`. Individual section copies remain unmodified.
+Completed results also include an "Analyze Another Sermon" action that clears
+the current inputs and output, then returns the user to the top of the page.
+
 ---
 
 ## Known Limitations & Workarounds
@@ -148,6 +153,11 @@ Uses browser `localStorage`:
 - Stores up to 10 most recent generations
 - Each item: id, timestamp, label, full output, clip min/max settings
 - Accessible via "History" button in header
+
+Public share links, server-side output storage, and output feedback are
+intentionally deferred. Do not add them without first deciding retention,
+deletion, privacy disclosure, and abuse-protection requirements. A public demo
+is also pending a real, attributed example transcript and output from Jake.
 
 ---
 
