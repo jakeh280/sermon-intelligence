@@ -42,6 +42,22 @@ const model = google("gemini-3.5-flash-lite"); // CORRECT
 // const model = google("gemini-2.0-flash");    // DO NOT USE
 ```
 
+### Under consideration: `gpt-5.6-luna` (not adopted, exploratory only)
+
+Jake is evaluating OpenAI's `gpt-5.6-luna` as a possible alternative (2026-08-03).
+Launched 2026-07-09 at $1/$6 per 1M input/output tokens; cut 80% on 2026-07-30 to
+$0.20/$1.20 per 1M tokens. Still pricier per-token than `gemini-3.5-flash-lite`
+(~$0.10/$0.40 per 1M), but at this app's traffic (rate-limited to 5 req/IP/hour)
+the dollar difference is cents/month either way — cost is not the deciding factor.
+
+Switching would require adding an `@ai-sdk/openai` provider and reworking the
+model init in `app/api/chat/route.ts`. Before switching, run a real transcript
+through both models and compare adherence to the system prompt's strict
+formatting rules (banned filler phrases, exact clip duration bounds, chapter
+formatting) — pricing pages don't tell you that, and this project has already
+been burned once by a model that silently failed (see `gemini-2.0-flash` above).
+No decision made yet; revisit if/when explored further.
+
 ---
 
 ## System Prompt
