@@ -1,6 +1,7 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
+import { isRateLimited, clientKey } from "@/lib/rateLimit";
 
 // Explicitly configure the Google provider to ensure it uses the correct API key
 const google = createGoogleGenerativeAI({
@@ -35,6 +36,13 @@ function parseClipBounds(body: unknown): { min: number; max: number } | null {
 }
 
 export async function POST(req: Request) {
+  if (isRateLimited(clientKey(req))) {
+    return new Response(
+      JSON.stringify({ error: "Too many requests. Please try again later." }),
+      { status: 429, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
