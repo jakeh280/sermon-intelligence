@@ -155,10 +155,20 @@ Cannot fetch live YouTube transcripts from Vercel (requests are blocked). Featur
 
 ```typescript
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const MAX_REQUESTS = 5;           // 5 requests per IP per hour
+const MAX_REQUESTS = 20;          // 20 requests per IP per hour
 ```
 
 Returns HTTP 429 with reset time if exceeded. Configured with `config.matcher = "/api/chat"`.
+
+Raised from 5 to 20 on 2026-07-19: Gemini spend was $0.13 across 90 days against a
+$5 monthly cap, so the old limit throttled real users to guard a cost that never
+materialized. Keep this figure in sync with `proxy.ts`.
+
+**Known limitation:** `ipStore` is an in-process `Map`, and Vercel serverless
+instances neither share memory nor persist across cold starts. So the limit is
+best effort: counts reset on a cold start and are tracked per instance, not
+globally. Fine at current spend. If abuse ever becomes real, this needs a shared
+store (Upstash Redis or Vercel KV), not a bigger number.
 
 ---
 
