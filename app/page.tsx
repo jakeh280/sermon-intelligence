@@ -16,6 +16,19 @@ import type { ComponentProps, CSSProperties } from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  CLIP_CEIL_SEC,
+  CLIP_FLOOR_SEC,
+  CLIP_STEP,
+  formatDurationSec,
+  snapClipSec,
+} from "@/lib/clipRange";
+import { parseHistory, type HistoryItem } from "@/lib/history";
+import {
+  isClipsSectionTitle,
+  parseBentoSections,
+  parseClipOptions,
+} from "@/lib/outputParsing";
 
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
 // sits on top and contrast already passes comfortably.
@@ -54,159 +67,9 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
   );
 }
 
-const CLIP_FLOOR_SEC = 15;
-const CLIP_CEIL_SEC = 600;
-const CLIP_STEP = 5;
-
-function snapClipSec(n: number): number {
-  const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
-  return Math.min(CLIP_CEIL_SEC, Math.max(CLIP_FLOOR_SEC, r));
-}
-
-function formatDurationSec(totalSec: number): string {
-  const s = Math.max(0, Math.round(totalSec));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return r === 0 ? `${m}m` : `${m}m ${r}s`;
-}
-
 function extension(name: string) {
   const i = name.lastIndexOf(".");
   return i >= 0 ? name.slice(i).toLowerCase() : "";
-}
-
-type BentoSection = { title: string; body: string };
-
-function parseBentoSections(markdown: string): BentoSection[] {
-  const trimmed = markdown.replace(/^\uFEFF/, "");
-  const parts = trimmed.split(/^###\s+/m);
-  const sections: BentoSection[] = [];
-
-  const preamble = parts[0]?.trim() ?? "";
-  if (preamble) {
-    sections.push({ title: "Draft", body: preamble });
-  }
-
-  for (let i = 1; i < parts.length; i++) {
-    const chunk = parts[i] ?? "";
-    const nl = chunk.indexOf("\n");
-    const title =
-      nl === -1 ? chunk.trim() : chunk.slice(0, nl).trim();
-    const body = nl === -1 ? "" : chunk.slice(nl + 1).trimEnd();
-    if (title || body) {
-      sections.push({ title: title || "Section", body });
-    }
-  }
-
-  return sections;
-}
-
-const CLIP_FIELD_LABELS = [
-  "Timestamps",
-  "Duration",
-  "Title",
-  "Transcript",
-  "Description",
-  "Why it works",
-] as const;
-
-type ClipFieldKey = (typeof CLIP_FIELD_LABELS)[number];
-
-type ParsedClip = Partial<Record<ClipFieldKey, string>> & {
-  optionLabel: string;
-};
-
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parseClipFieldLines(block: string): Partial<Record<ClipFieldKey, string>> {
-  const lines = block.split("\n");
-  const out: Partial<Record<ClipFieldKey, string>> = {};
-  let current: ClipFieldKey | null = null;
-
-  const flush = (buf: string[]) => {
-    const text = buf.join(" ").replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
-    if (current && text) out[current] = text;
-  };
-
-  let buf: string[] = [];
-  for (const line of lines) {
-    let matchedKey: ClipFieldKey | null = null;
-    let valuePart = "";
-    for (const k of CLIP_FIELD_LABELS) {
-      const starred = new RegExp(
-        `^\\s*\\*\\*${escapeRegExp(k)}\\*\\*\\s*:\\s*(.*)$`,
-        "i",
-      );
-      const plain = new RegExp(
-        `^\\s*${escapeRegExp(k)}\\s*:\\s*(.*)$`,
-        "i",
-      );
-      const m = line.match(starred) ?? line.match(plain);
-      if (m) {
-        matchedKey = k;
-        valuePart = m[1]?.trim() ?? "";
-        break;
-      }
-    }
-    if (matchedKey) {
-      flush(buf);
-      current = matchedKey;
-      buf = valuePart ? [valuePart] : [];
-    } else if (current && line.trim()) {
-      buf.push(line.trim());
-    }
-  }
-  flush(buf);
-  return out;
-}
-
-function splitClipOptionBlocks(body: string): { preamble: string; blocks: string[] } {
-  const lines = body.split("\n");
-  const preamble: string[] = [];
-  const blocks: string[] = [];
-  let current: string[] | null = null;
-
-  for (const line of lines) {
-    if (/^Option\s+[123]\s*$/i.test(line.trim())) {
-      if (current) blocks.push(current.join("\n"));
-      current = [line];
-    } else if (current) {
-      current.push(line);
-    } else {
-      preamble.push(line);
-    }
-  }
-  if (current) blocks.push(current.join("\n"));
-
-  return {
-    preamble: preamble.join("\n").trim(),
-    blocks,
-  };
-}
-
-function parseClipOptions(body: string): {
-  preamble: string;
-  clips: ParsedClip[];
-} {
-  const { preamble, blocks } = splitClipOptionBlocks(body);
-  const clips: ParsedClip[] = [];
-  for (const block of blocks) {
-    const firstLine = block.split("\n")[0]?.trim() ?? "Option";
-    const rest = block.split("\n").slice(1).join("\n");
-    const fields = parseClipFieldLines(rest);
-    clips.push({
-      optionLabel: firstLine,
-      ...fields,
-    });
-  }
-  return { preamble, clips };
-}
-
-function isClipsSectionTitle(title: string) {
-  return /^clips\b/i.test(title.trim());
 }
 
 const markdownComponents: NonNullable<
@@ -744,15 +607,6 @@ function PromoCard({ className }: { className?: string } = {}) {
   );
 }
 
-type HistoryItem = {
-  id: string;
-  timestamp: number;
-  label: string;
-  output: string;
-  clipMinSec: number;
-  clipMaxSec: number;
-};
-
 function HistoryModal({
   items,
   onSelect,
@@ -848,14 +702,7 @@ export default function Home() {
 
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     if (typeof window === "undefined") return [];
-    const saved = localStorage.getItem("sermon_history");
-    if (!saved) return [];
-    try {
-      return JSON.parse(saved);
-    } catch (e) {
-      console.error("Failed to load history", e);
-      return [];
-    }
+    return parseHistory(localStorage.getItem("sermon_history"));
   });
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);

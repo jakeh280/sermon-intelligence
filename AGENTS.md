@@ -106,6 +106,9 @@ function snapClipSec(n: number): number {
 
 ### Output Parsing
 
+Pure parsing lives in `lib/outputParsing.ts`. Keep model response interpretation
+there so format changes can be tested without rendering the page.
+
 AI response is streamed as Markdown and parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`
 - Each section becomes a Bento card
@@ -121,7 +124,8 @@ function parseClipOptions(body: string): { preamble: string; clips: ParsedClip[]
 
 ### Bento Cards
 
-All UI is in `app/page.tsx` (no separate `components/` folder). Card types:
+The result cards still live in `app/page.tsx`. Pure parsing, clip range rules,
+and history decoding no longer belong in that component. Card types:
 1. **BentoCard** — Standard Markdown content with copy button
 2. **TitlesBentoCard** — Renders 3 title options as horizontal cards
 3. **ClipsBentoCard** — Parses and displays 3 clip options in grid layout
@@ -196,6 +200,7 @@ is also pending a real, attributed example transcript and output from Jake.
 
 ```bash
 npm run dev      # Local development (port 3000)
+npm test         # Pure analysis and browser history logic
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # Run ESLint
@@ -210,14 +215,19 @@ TypeScript: ES2017 target, ESNext modules, strict mode, `@/*` path alias to proj
 ```
 sermon-intelligence/
 ├── app/
-│   ├── page.tsx              # Main UI (1600+ lines, all client-side logic + bento cards)
+│   ├── page.tsx              # Main UI, orchestration, and bento cards
 │   ├── layout.tsx            # RootLayout, metadata
 │   ├── globals.css           # Tailwind imports, CSS variables
 │   └── api/
 │       └── chat/
 │           └── route.ts      # Server endpoint, Gemini API streaming
 ├── lib/
+│   ├── clipRange.ts          # Clip range constants, snapping, and labels
+│   ├── history.ts            # Safe browser history decoding
+│   ├── outputParsing.ts      # Pure Markdown and clip output parsing
 │   └── systemPrompt.ts       # buildSystemPrompt(min, max) function
+├── tests/
+│   └── analysisLogic.test.ts # Parser, range, and history regression tests
 ├── public/                   # Static assets (SVGs, favicon)
 ├── proxy.ts                  # Rate limiting logic (not a Next.js middleware)
 ├── tsconfig.json
