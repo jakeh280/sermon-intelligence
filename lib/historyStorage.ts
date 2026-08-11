@@ -25,6 +25,19 @@ export function historyStorage(): HistoryStorage | null {
   }
 }
 
+/**
+ * `crypto.randomUUID` is missing on older Safari and absent outside secure
+ * contexts, where it would throw while saving a result the user just waited for.
+ * The id only has to be unique within one browser's history list.
+ */
+export function createHistoryId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
 export function readHistory(storage: HistoryStorage | null): HistoryItem[] {
   if (!storage) return [];
   try {

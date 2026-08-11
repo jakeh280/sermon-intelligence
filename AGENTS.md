@@ -82,13 +82,35 @@ Key behaviors:
 ### Input Processing
 
 Three input modes:
-1. **File Upload** (`.txt` or `.srt` files only)
+1. **File Upload** (`.txt`, `.srt`, or `.vtt` files only)
 2. **Direct Paste** (textarea for transcript text)
 3. **History** (localStorage-backed recent generations)
 
-```javascript
-const ACCEPTED = new Set([".txt", ".srt"]);
+Accepted extensions, size and length limits, and the byte order mark aware
+decoder all live in `lib/transcriptInput.ts`. `MAX_TRANSCRIPT_CHARACTERS` is
+imported by the API route, so the limit is defined once.
+
+```typescript
+export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 ```
+
+### Transcript Normalization
+
+`lib/transcript.ts` rewrites timestamped exports into the `[hh:mm:ss:ff]` tags
+`buildSystemPrompt()` documents, before the text reaches the model.
+
+- **Premiere ranges** (`hh:mm:ss:ff - hh:mm:ss:ff`), including drop frame
+  semicolons and millisecond variants. `Unknown` speaker labels are dropped;
+  named speakers are kept.
+- **SRT and WebVTT cues** are converted to the same tags, dropping cue indices
+  and metadata blocks. Cue text is never rewritten, so inline markup survives
+  and the prompt's verbatim clip rule still holds.
+- Caption conversion is **all or nothing**: anything unaccounted for (a WebVTT
+  cue identifier, missing blank lines, stray prose) passes the file through
+  untouched rather than half converting it.
+- Milliseconds map to `:00` frames rather than guessing a frame rate, which is
+  safe only because the prompt tells the model to ignore the frames component.
+- Normalizing is idempotent. Both `app/page.tsx` and the API route call it.
 
 ### Clip Range Slider
 
@@ -108,6 +130,16 @@ function snapClipSec(n: number): number {
 
 Pure parsing lives in `lib/outputParsing.ts`. Keep model response interpretation
 there so format changes can be tested without rendering the page.
+
+Parsing is deliberately tolerant of formatting the model drifts into: option
+headers behind bold, headings or bullets; field labels with the colon inside the
+bold; and a fallback to `## ` headings when a response contains no `### ` at
+all. An option header must still be the entire line, so quoted text cannot split
+a clip.
+
+`lib/outputHealth.ts` inspects a **completed** response and reports empty,
+unstructured, or missing-section results. Never run it mid stream: a partial
+stream is legitimately missing sections.
 
 AI response is streamed as Markdown and parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`
@@ -224,12 +256,21 @@ sermon-intelligence/
 ├── lib/
 │   ├── clipRange.ts          # Clip range constants, snapping, and labels
 │   ├── history.ts            # Safe browser history decoding
+│   ├── historyStorage.ts     # localStorage access that cannot throw
+│   ├── outputHealth.ts       # Empty, unstructured, and truncated response checks
 │   ├── outputParsing.ts      # Pure Markdown and clip output parsing
+│   ├── requestErrors.ts      # Stall timeout and user facing failure messages
 │   ├── rateLimit.ts          # route level burst limiter and client key
 │   ├── site.ts               # canonical site metadata and structured data
-│   └── systemPrompt.ts       # buildSystemPrompt(min, max) function
+│   ├── systemPrompt.ts       # buildSystemPrompt(min, max) function
+│   ├── transcript.ts         # Premiere, SRT, and WebVTT normalization
+│   └── transcriptInput.ts    # Accepted formats, limits, encoding
 ├── tests/
-│   └── analysisLogic.test.ts # Parser, range, and history regression tests
+│   ├── analysisLogic.test.ts # Parser, range, and history regression tests
+│   ├── browserResilience.test.ts     # Storage, upload, and request failures
+│   ├── outputHealth.test.ts          # Malformed response detection
+│   ├── outputParsingResilience.test.ts # Model formatting drift
+│   └── transcriptFormats.test.ts     # Timestamp and caption formats
 ├── public/                   # Static assets (SVGs, favicon)
 ├── proxy.ts                  # Rate limiting logic (not a Next.js middleware)
 ├── tsconfig.json
@@ -298,9 +339,10 @@ If app loads then returns to homepage with no errors:
 3. Test with a real transcript locally, then deploy to Vercel
 
 ### Add a New Input Format
-1. Update `ACCEPTED` file extensions
-2. Add parsing logic to `handleFiles()`
-3. Update error messages
+1. Update `ACCEPTED_EXTENSIONS` in `lib/transcriptInput.ts`
+2. Update the `accept` attribute and the supported formats hint in `app/page.tsx`
+3. Add normalization to `lib/transcript.ts`, keeping it all or nothing
+4. Cover it in `tests/transcriptFormats.test.ts` with synthetic fixtures only
 
 ### Modify Clip Validation
 1. Change `CLIP_FLOOR_SEC`, `CLIP_CEIL_SEC`, `CLIP_STEP`
@@ -319,5 +361,5 @@ If app loads then returns to homepage with no errors:
 
 ---
 
-**Last Updated:** 2026-08-10
+**Last Updated:** 2026-08-11
 **Status:** Active maintenance, occasional feature additions

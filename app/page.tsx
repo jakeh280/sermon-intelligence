@@ -27,6 +27,7 @@ import {
 import { type HistoryItem } from "@/lib/history";
 import {
   clearStoredHistory,
+  createHistoryId,
   historyStorage,
   readHistory,
   writeHistory,
@@ -725,7 +726,7 @@ export default function Home() {
   // so state follows whatever actually persisted rather than assuming it stuck.
   const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
     const newItem: HistoryItem = {
-      id: crypto.randomUUID(),
+      id: createHistoryId(),
       timestamp: Date.now(),
       label,
       output: text,

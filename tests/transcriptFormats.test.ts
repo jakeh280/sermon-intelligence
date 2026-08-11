@@ -150,12 +150,101 @@ test("malformed ranges pass through untouched rather than half converted", () =>
   }
 });
 
-test("caption formats are never mistaken for Premiere ranges", () => {
-  const srt = "1\r\n00:00:01,000 --> 00:00:03,000\r\nSynthetic caption text.\r\n";
-  const vtt =
-    "WEBVTT\r\n\r\n00:00:01.000 --> 00:00:03.000\r\nSynthetic caption text.\r\n";
-  assert.equal(normalizeTranscript(srt), srt);
-  assert.equal(normalizeTranscript(vtt), vtt);
+test("caption cues are converted through the caption path, not the range path", () => {
+  const srt = `1
+00:00:01,000 --> 00:00:03,000
+Synthetic first caption.
+
+2
+00:00:03,500 --> 00:00:07,250
+Synthetic second caption.`;
+  assert.equal(
+    normalizeTranscript(srt),
+    `[00:00:01:00]
+Synthetic first caption.
+
+[00:00:03:00]
+Synthetic second caption.`,
+  );
+
+  const vtt = `WEBVTT
+Kind: captions
+Language: en
+
+NOTE This block is metadata and is dropped.
+
+00:00:01.000 --> 00:00:03.000 align:start position:0%
+Synthetic first caption.
+
+00:01:02.500 --> 00:01:09.750
+Synthetic second caption.`;
+  assert.equal(
+    normalizeTranscript(vtt),
+    `[00:00:01:00]
+Synthetic first caption.
+
+[00:01:02:00]
+Synthetic second caption.`,
+  );
+});
+
+test("caption cue text is preserved verbatim, including inline markup", () => {
+  const vtt = `WEBVTT
+
+00:00:01.000 --> 00:00:03.000
+<v Pastor Sam>Synthetic <i>emphasised</i> caption.
+Second line of the same cue.`;
+  assert.equal(
+    normalizeTranscript(vtt),
+    `[00:00:01:00]
+<v Pastor Sam>Synthetic <i>emphasised</i> caption.
+Second line of the same cue.`,
+  );
+});
+
+test("short form WebVTT timestamps without hours are placed correctly", () => {
+  const vtt = "WEBVTT\n\n12:05.500 --> 12:09.000\nSynthetic caption text.";
+  assert.equal(
+    normalizeTranscript(vtt),
+    "[00:12:05:00]\nSynthetic caption text.",
+  );
+});
+
+test("caption files this cannot account for pass through untouched", () => {
+  const cueIdentifier = `WEBVTT
+
+intro-cue
+00:00:01.000 --> 00:00:03.000
+Synthetic caption text.`;
+
+  const noBlankLines = `1
+00:00:01,000 --> 00:00:03,000
+Synthetic first caption.
+2
+00:00:03,500 --> 00:00:07,250
+Synthetic second caption.`;
+
+  const emptyCue = `1
+00:00:01,000 --> 00:00:03,000
+
+2
+00:00:03,500 --> 00:00:07,250
+Synthetic second caption.`;
+
+  const strayProse = `Some notes before the captions.
+
+1
+00:00:01,000 --> 00:00:03,000
+Synthetic caption text.`;
+
+  for (const input of [cueIdentifier, noBlankLines, emptyCue, strayProse]) {
+    assert.equal(normalizeTranscript(input), input);
+  }
+});
+
+test("plain text containing an arrow is not treated as captions", () => {
+  const prose = "We moved from doubt --> to trust that morning.";
+  assert.equal(normalizeTranscript(prose), prose);
 });
 
 test("normalizing an already normalized transcript changes nothing", () => {
@@ -163,6 +252,8 @@ test("normalizing an already normalized transcript changes nothing", () => {
     "00:00:00:03 - 00:00:23:14\nUnknown\nSynthetic frame fixture.",
     "00:00:00;03 - 00:00:23;14\nUnknown\nSynthetic drop frame fixture.",
     "00:00:00.030 - 00:00:23.140\nUnknown\nSynthetic millisecond fixture.",
+    "1\n00:00:01,000 --> 00:00:03,000\nSynthetic SRT fixture.",
+    "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nSynthetic WebVTT fixture.",
   ];
   for (const fixture of fixtures) {
     const once = normalizeTranscript(fixture);
@@ -174,6 +265,23 @@ test("a very long single line does not stall the range matcher", () => {
   const longLine = `Synthetic ${"sentence ".repeat(50_000)}`;
   const input = `00:00:01:00 - 00:00:05:00\nUnknown\n${longLine}`;
   assert.equal(normalizeTranscript(input), `[00:00:01:00]\n${longLine}`);
+});
+
+test("very long caption files convert every cue", () => {
+  const cues = 20_000;
+  const input = Array.from({ length: cues }, (_, i) => {
+    const start = String(i % 60).padStart(2, "0");
+    const end = String((i + 1) % 60).padStart(2, "0");
+    return `${i + 1}\n00:00:${start},000 --> 00:00:${end},000\nSynthetic cue line ${i}.`;
+  }).join("\n\n");
+
+  const lines = normalizeTranscript(input).split("\n");
+  const tags = lines.filter((line) => /^\[\d{2}:\d{2}:\d{2}:00\]$/.test(line));
+
+  assert.equal(tags.length, cues);
+  assert.equal(lines[0], "[00:00:00:00]");
+  assert.equal(lines[1], "Synthetic cue line 0.");
+  assert.equal(lines[lines.length - 1], `Synthetic cue line ${cues - 1}.`);
 });
 
 test("very long transcripts normalize every block", () => {

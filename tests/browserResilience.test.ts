@@ -4,6 +4,7 @@ import test from "node:test";
 import type { HistoryItem } from "../lib/history.ts";
 import {
   clearStoredHistory,
+  createHistoryId,
   HISTORY_KEY,
   readHistory,
   writeHistory,
@@ -106,6 +107,30 @@ test("a storage that refuses every write reports an empty history", () => {
   const refusing = fakeStorage({ maxLength: 0 });
   assert.deepEqual(writeHistory(refusing, [item("a")]), []);
   assert.equal(refusing.value, null);
+});
+
+test("history ids are unique and survive crypto.randomUUID being unavailable", () => {
+  const ids = new Set(Array.from({ length: 50 }, () => createHistoryId()));
+  assert.equal(ids.size, 50);
+
+  const original = globalThis.crypto.randomUUID;
+  Object.defineProperty(globalThis.crypto, "randomUUID", {
+    configurable: true,
+    value: () => {
+      throw new Error("SecurityError");
+    },
+  });
+  try {
+    const fallback = createHistoryId();
+    assert.equal(typeof fallback, "string");
+    assert.equal(fallback.length > 0, true);
+    assert.notEqual(fallback, createHistoryId());
+  } finally {
+    Object.defineProperty(globalThis.crypto, "randomUUID", {
+      configurable: true,
+      value: original,
+    });
+  }
 });
 
 test("clearing removes the stored entry", () => {

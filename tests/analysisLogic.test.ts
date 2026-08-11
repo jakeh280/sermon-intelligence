@@ -109,9 +109,12 @@ test("plain and already tagged transcripts pass through", () => {
   assert.equal(normalizeTranscript(plain), plain);
 });
 
-test("SRT timestamps are not mistaken for Premiere ranges", () => {
+test("SRT cues become prompt timestamp tags", () => {
   const srt = "1\r\n00:00:01,000 --> 00:00:03,000\r\nSynthetic caption text.\r\n";
-  assert.equal(normalizeTranscript(srt), srt);
+  assert.equal(
+    normalizeTranscript(srt),
+    "[00:00:01:00]\nSynthetic caption text.",
+  );
 });
 
 test("mixed tagged and Premiere blocks preserve useful speaker labels", () => {
