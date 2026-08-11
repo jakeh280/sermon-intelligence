@@ -29,6 +29,7 @@ import {
   parseBentoSections,
   parseClipOptions,
 } from "@/lib/outputParsing";
+import { normalizeTranscript } from "@/lib/transcript";
 
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
 // sits on top and contrast already passes comfortably.
@@ -932,7 +933,7 @@ export default function Home() {
       inputMode === "upload"
         ? fileName ?? "File Upload"
         : `Pasted Text (${pastedText.trim().split(/\s+/).length} words)`;
-    void runWithText(trimmed, label, minSec, maxSec);
+    void runWithText(normalizeTranscript(trimmed), label, minSec, maxSec);
   }, [
     clipMaxSec,
     clipMinSec,

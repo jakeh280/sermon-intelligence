@@ -2,6 +2,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 import { isRateLimited, clientKey } from "@/lib/rateLimit";
+import { normalizeTranscript } from "@/lib/transcript";
 
 // Explicitly configure the Google provider to ensure it uses the correct API key
 const google = createGoogleGenerativeAI({
@@ -53,13 +54,14 @@ export async function POST(req: Request) {
     });
   }
 
-  const text =
+  const rawText =
     typeof body === "object" &&
       body !== null &&
       "text" in body &&
       typeof (body as { text: unknown }).text === "string"
       ? (body as { text: string }).text.trim()
       : "";
+  const text = normalizeTranscript(rawText);
 
   if (!text) {
     return new Response(

@@ -13,6 +13,7 @@ import {
   parseBentoSections,
   parseClipOptions,
 } from "../lib/outputParsing.ts";
+import { normalizeTranscript } from "../lib/transcript.ts";
 
 test("clip bounds snap and clamp", () => {
   assert.equal(snapClipSec(17), 15);
@@ -81,4 +82,61 @@ test("history parsing discards corruption instead of crashing the page", () => {
   ]));
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0]?.id, "good");
+});
+
+test("Premiere transcript blocks become prompt timestamp tags", () => {
+  const premiere = `00:00:00:03 - 00:00:23:14
+Unknown
+Synthetic opening sentence for transcript normalization.
+
+00:00:23:16 - 00:00:48:21
+Unknown
+Synthetic second sentence for transcript normalization.`;
+  assert.equal(
+    normalizeTranscript(premiere),
+    `[00:00:00:03]
+Synthetic opening sentence for transcript normalization.
+
+[00:00:23:16]
+Synthetic second sentence for transcript normalization.`,
+  );
+});
+
+test("plain and already tagged transcripts pass through", () => {
+  const tagged = "\uFEFF[00:01:02:03]\r\nAlready ready.\r\n\r\n\r\n";
+  const plain = "  Plain transcript text.  \r\n\r\nSecond paragraph.\r\n";
+  assert.equal(normalizeTranscript(tagged), tagged);
+  assert.equal(normalizeTranscript(plain), plain);
+});
+
+test("SRT timestamps are not mistaken for Premiere ranges", () => {
+  const srt = "1\r\n00:00:01,000 --> 00:00:03,000\r\nSynthetic caption text.\r\n";
+  assert.equal(normalizeTranscript(srt), srt);
+});
+
+test("mixed tagged and Premiere blocks preserve useful speaker labels", () => {
+  const mixed = `[00:00:01:02]
+Already tagged text.
+
+00:00:10:00 - 00:00:20:00
+Pastor
+Named speaker text.
+
+00:00:20:01 - 00:00:30:00
+
+UNKNOWN
+Unknown speaker text.`;
+  assert.equal(
+    normalizeTranscript(mixed),
+    `[00:00:01:02]
+Already tagged text.
+
+[00:00:10:00]
+Pastor
+Named speaker text.
+
+[00:00:20:01]
+
+Unknown speaker text.`,
+  );
 });
