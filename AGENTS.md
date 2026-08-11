@@ -10,10 +10,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Sermon Intelligence is a free web app for church media directors that analyzes sermon transcripts and generates YouTube metadata (titles, descriptions, chapter markers) and social media clip suggestions.
 
-- **Framework:** Next.js 16.2.9 + React 19 + TypeScript
+- **Framework:** Next.js 16.3.0 + React 19 + TypeScript
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
-- **AI SDK:** Vercel AI SDK (`ai` ^6.x) with `@ai-sdk/google` provider
+- **AI SDK:** Vercel AI SDK (`ai` ^7.x) with `@ai-sdk/google` provider
 - **AI Models:** Gemini 3.5 Flash Lite via Google Generative AI API
 - **Deployment:** GitHub + Vercel auto-deploy
 
@@ -106,6 +106,9 @@ function snapClipSec(n: number): number {
 
 ### Output Parsing
 
+Pure parsing lives in `lib/outputParsing.ts`. Keep model response interpretation
+there so format changes can be tested without rendering the page.
+
 AI response is streamed as Markdown and parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`
 - Each section becomes a Bento card
@@ -121,7 +124,8 @@ function parseClipOptions(body: string): { preamble: string; clips: ParsedClip[]
 
 ### Bento Cards
 
-All UI is in `app/page.tsx` (no separate `components/` folder). Card types:
+The result cards still live in `app/page.tsx`. Pure parsing, clip range rules,
+and history decoding no longer belong in that component. Card types:
 1. **BentoCard** — Standard Markdown content with copy button
 2. **TitlesBentoCard** — Renders 3 title options as horizontal cards
 3. **ClipsBentoCard** — Parses and displays 3 clip options in grid layout
@@ -151,7 +155,7 @@ Cannot fetch live YouTube transcripts from Vercel (requests are blocked). Featur
 
 ## Rate Limiting
 
-**File:** `proxy.ts` (root level — this is NOT a Next.js `middleware.ts`)
+**Files:** `proxy.ts` at the root, plus `lib/rateLimit.ts` called directly by the API route. The proxy is not a Next.js `middleware.ts`.
 
 ```typescript
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
@@ -162,7 +166,7 @@ Returns HTTP 429 with reset time if exceeded. Configured with `config.matcher = 
 
 Raised from 5 to 20 on 2026-07-19: Gemini spend was $0.13 across 90 days against a
 $5 monthly cap, so the old limit throttled real users to guard a cost that never
-materialized. Keep this figure in sync with `proxy.ts`.
+materialized. Keep this figure in sync in both limiter files.
 
 **Known limitation:** `ipStore` is an in-process `Map`, and Vercel serverless
 instances neither share memory nor persist across cold starts. So the limit is
@@ -189,13 +193,14 @@ is also pending a real, attributed example transcript and output from Jake.
 
 ## Deployment & Environment
 
-- **Platform:** Vercel free hobby tier, Node.js 18+ runtime
+- **Platform:** Vercel free hobby tier, current Vercel Node.js runtime
 - **`maxDuration = 60`** seconds for streaming responses
 - **Env var:** `GOOGLE_GENERATIVE_AI_API_KEY`
 - **Analytics:** Vercel Analytics (`@vercel/analytics`, free tier), wired via `<Analytics />` in `app/layout.tsx`. Google Analytics and Microsoft Clarity were both removed (July 2026).
 
 ```bash
 npm run dev      # Local development (port 3000)
+npm test         # Pure analysis and browser history logic
 npm run build    # Production build
 npm run start    # Start production server
 npm run lint     # Run ESLint
@@ -210,14 +215,21 @@ TypeScript: ES2017 target, ESNext modules, strict mode, `@/*` path alias to proj
 ```
 sermon-intelligence/
 ├── app/
-│   ├── page.tsx              # Main UI (1600+ lines, all client-side logic + bento cards)
+│   ├── page.tsx              # Main UI, orchestration, and bento cards
 │   ├── layout.tsx            # RootLayout, metadata
 │   ├── globals.css           # Tailwind imports, CSS variables
 │   └── api/
 │       └── chat/
 │           └── route.ts      # Server endpoint, Gemini API streaming
 ├── lib/
+│   ├── clipRange.ts          # Clip range constants, snapping, and labels
+│   ├── history.ts            # Safe browser history decoding
+│   ├── outputParsing.ts      # Pure Markdown and clip output parsing
+│   ├── rateLimit.ts          # route level burst limiter and client key
+│   ├── site.ts               # canonical site metadata and structured data
 │   └── systemPrompt.ts       # buildSystemPrompt(min, max) function
+├── tests/
+│   └── analysisLogic.test.ts # Parser, range, and history regression tests
 ├── public/                   # Static assets (SVGs, favicon)
 ├── proxy.ts                  # Rate limiting logic (not a Next.js middleware)
 ├── tsconfig.json
@@ -307,5 +319,5 @@ If app loads then returns to homepage with no errors:
 
 ---
 
-**Last Updated:** 2026-06-23
+**Last Updated:** 2026-08-10
 **Status:** Active maintenance, occasional feature additions
