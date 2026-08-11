@@ -9,6 +9,7 @@ import {
   Info,
   Loader2,
   Trash2,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,13 +24,33 @@ import {
   formatDurationSec,
   snapClipSec,
 } from "@/lib/clipRange";
-import { parseHistory, type HistoryItem } from "@/lib/history";
+import { type HistoryItem } from "@/lib/history";
+import {
+  clearStoredHistory,
+  createHistoryId,
+  historyStorage,
+  readHistory,
+  writeHistory,
+} from "@/lib/historyStorage";
 import {
   isClipsSectionTitle,
+  isTitlesSectionTitle,
   parseBentoSections,
   parseClipOptions,
 } from "@/lib/outputParsing";
+import { describeOutputIssues, type OutputIssue } from "@/lib/outputHealth";
+import {
+  describeRequestFailure,
+  STALL_TIMEOUT_MS,
+  StalledResponseError,
+} from "@/lib/requestErrors";
 import { normalizeTranscript } from "@/lib/transcript";
+import {
+  ACCEPTED_EXTENSIONS_LABEL,
+  decodeTranscriptBytes,
+  describeFileProblem,
+  describeTranscriptProblem,
+} from "@/lib/transcriptInput";
 
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
 // sits on top and contrast already passes comfortably.
@@ -38,8 +59,6 @@ const ACCENT = "#0B6ED0";
 // as text measures 3.79:1, under the WCAG 4.5:1 minimum; #3B93E8 measures 5.96:1.
 // It appears as a literal in Tailwind classes rather than a constant, because
 // arbitrary values have to be statically visible to the Tailwind compiler.
-const ACCEPTED = new Set([".txt", ".srt"]);
-
 const COMMUNITY_DISCLAIMER =
   "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone.";
 
@@ -66,11 +85,6 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
     "isAiLimit" in e &&
     (e as { isAiLimit?: boolean }).isAiLimit === true
   );
-}
-
-function extension(name: string) {
-  const i = name.lastIndexOf(".");
-  return i >= 0 ? name.slice(i).toLowerCase() : "";
 }
 
 const markdownComponents: NonNullable<
@@ -699,43 +713,41 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
+  const [outputIssues, setOutputIssues] = useState<OutputIssue[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    return parseHistory(localStorage.getItem("sermon_history"));
-  });
+  const [history, setHistory] = useState<HistoryItem[]>(() =>
+    readHistory(historyStorage()),
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
-  // Save history helper
+  // Save history helper. Storage can refuse the write (private browsing, quota),
+  // so state follows whatever actually persisted rather than assuming it stuck.
   const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
     const newItem: HistoryItem = {
-      id: crypto.randomUUID(),
+      id: createHistoryId(),
       timestamp: Date.now(),
       label,
       output: text,
       clipMinSec: min,
       clipMaxSec: max,
     };
-    setHistory((prev) => {
-      const next = [newItem, ...prev].slice(0, 10); // Keep last 10
-      localStorage.setItem("sermon_history", JSON.stringify(next));
-      return next;
-    });
+    setHistory((prev) => writeHistory(historyStorage(), [newItem, ...prev]));
   }, []);
 
   const deleteHistoryItem = (id: string) => {
-    setHistory((prev) => {
-      const next = prev.filter((i) => i.id !== id);
-      localStorage.setItem("sermon_history", JSON.stringify(next));
-      return next;
-    });
+    setHistory((prev) =>
+      writeHistory(
+        historyStorage(),
+        prev.filter((i) => i.id !== id),
+      ),
+    );
   };
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem("sermon_history");
+    clearStoredHistory(historyStorage());
   };
 
   const loadFromHistory = (item: HistoryItem) => {
@@ -744,8 +756,14 @@ export default function Home() {
     setClipMaxSec(item.clipMaxSec);
     setProcessingLabel(item.label);
     setShowHistory(false);
-    setStatus("idle");
-    setErrorMessage(null);
+
+    // Entries saved before empty responses were rejected can still be blank, and
+    // a blank one renders no cards at all. Say so rather than showing an empty page.
+    const issues = describeOutputIssues(item.output);
+    const empty = issues.find((issue) => issue.code === "empty");
+    setStatus(empty ? "error" : "idle");
+    setErrorMessage(empty ? empty.message : null);
+    setOutputIssues(empty ? [] : issues);
   };
 
   const sections = useMemo(() => parseBentoSections(output), [output]);
@@ -763,46 +781,72 @@ export default function Home() {
   }, []);
 
   const streamChatResponse = useCallback(
-    async (text: string, minSec: number, maxSec: number, label: string) => {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          clipMinSec: minSec,
-          clipMaxSec: maxSec,
-        }),
-      });
-      if (!res.ok) {
-        if (isAiLimitHttpStatus(res.status)) {
-          throw aiLimitError();
+    async (text: string, minSec: number, maxSec: number): Promise<string> => {
+      // Nothing else bounds this request from the client's side. Without a stall
+      // guard a dropped connection leaves the spinner running with no way out.
+      const controller = new AbortController();
+      let stalled = false;
+      let stallTimer = 0;
+      const armStallTimer = () => {
+        window.clearTimeout(stallTimer);
+        stallTimer = window.setTimeout(() => {
+          stalled = true;
+          controller.abort();
+        }, STALL_TIMEOUT_MS);
+      };
+
+      armStallTimer();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            clipMinSec: minSec,
+            clipMaxSec: maxSec,
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (isAiLimitHttpStatus(res.status)) {
+            throw aiLimitError();
+          }
+          let detail = res.statusText;
+          try {
+            const err = (await res.json()) as { error?: string };
+            if (err.error) detail = err.error;
+          } catch { /* ignore */ }
+          throw new Error(detail || "Request failed");
         }
-        let detail = res.statusText;
-        try {
-          const err = (await res.json()) as { error?: string };
-          if (err.error) detail = err.error;
-        } catch { /* ignore */ }
-        throw new Error(detail || "Request failed");
-      }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      const decoder = new TextDecoder();
-      let accumulated = "";
+        const decoder = new TextDecoder();
+        let accumulated = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Each chunk re-arms the timer, so a long but healthy generation is
+          // never cut off. Only silence counts against it.
+          armStallTimer();
+          accumulated += decoder.decode(value, { stream: true });
+          setOutput(accumulated);
+        }
+
+        accumulated += decoder.decode();
         setOutput(accumulated);
+        return accumulated;
+      } catch (e) {
+        if (stalled) throw new StalledResponseError();
+        throw e;
+      } finally {
+        window.clearTimeout(stallTimer);
       }
-
-      accumulated += decoder.decode();
-      setOutput(accumulated);
-      saveToHistory(label, accumulated, minSec, maxSec);
     },
-    [saveToHistory],
+    [],
   );
 
   const runWithText = useCallback(
@@ -816,10 +860,25 @@ export default function Home() {
       setOutput("");
       setErrorMessage(null);
       setLimitNotice(false);
+      setOutputIssues([]);
       setStatus("loading");
 
       try {
-        await streamChatResponse(text, minSec, maxSec, label);
+        const result = await streamChatResponse(text, minSec, maxSec);
+
+        // The response headers arrive before the model emits a single token, so
+        // a 200 is no promise of usable content. Inspect what actually streamed.
+        const issues = describeOutputIssues(result);
+        const empty = issues.find((issue) => issue.code === "empty");
+        if (empty) {
+          setOutput("");
+          setStatus("error");
+          setErrorMessage(empty.message);
+          return;
+        }
+
+        saveToHistory(label, result, minSec, maxSec);
+        setOutputIssues(issues);
         setLimitNotice(false);
         setStatus("idle");
       } catch (e) {
@@ -830,12 +889,10 @@ export default function Home() {
           return;
         }
         setStatus("error");
-        setErrorMessage(
-          e instanceof Error ? e.message : "Something went wrong",
-        );
+        setErrorMessage(describeRequestFailure(e));
       }
     },
-    [streamChatResponse],
+    [saveToHistory, streamChatResponse],
   );
 
   const handleFiles = useCallback(
@@ -844,16 +901,30 @@ export default function Home() {
       const file = list[0];
       if (!file) return;
 
-      const ext = extension(file.name);
-      if (!ACCEPTED.has(ext)) {
+      const fileProblem = describeFileProblem(file);
+      if (fileProblem) {
         setStatus("error");
-        setErrorMessage("Please upload a .txt or .srt file.");
+        setErrorMessage(fileProblem);
         return;
       }
 
       const reader = new FileReader();
       reader.onload = () => {
-        const text = typeof reader.result === "string" ? reader.result : "";
+        // Read as bytes rather than text so a byte order mark can pick the
+        // encoding. Windows transcript exports are still often UTF-16.
+        const buffer =
+          reader.result instanceof ArrayBuffer ? reader.result : new ArrayBuffer(0);
+        const text = decodeTranscriptBytes(new Uint8Array(buffer));
+
+        const textProblem = describeTranscriptProblem(text, "upload");
+        if (textProblem) {
+          setFileName(null);
+          setUploadedText("");
+          setStatus("error");
+          setErrorMessage(textProblem);
+          return;
+        }
+
         setFileName(file.name);
         setUploadedText(text);
         setErrorMessage(null);
@@ -863,7 +934,7 @@ export default function Home() {
         setStatus("error");
         setErrorMessage("Could not read that file.");
       };
-      reader.readAsText(file);
+      reader.readAsArrayBuffer(file);
     },
     [],
   );
@@ -899,6 +970,7 @@ export default function Home() {
     setPastedText("");
     setErrorMessage(null);
     setLimitNotice(false);
+    setOutputIssues([]);
     setStatus("idle");
     setCopied(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -915,13 +987,13 @@ export default function Home() {
 
     const text = inputMode === "paste" ? pastedText : uploadedText;
     const trimmed = text.trim();
-    if (!trimmed) {
+    const problem =
+      inputMode === "upload" && !fileName
+        ? `Please upload a ${ACCEPTED_EXTENSIONS_LABEL} file before generating.`
+        : describeTranscriptProblem(trimmed, inputMode);
+    if (problem) {
       setStatus("error");
-      setErrorMessage(
-        inputMode === "paste"
-          ? "Please paste a transcript before generating."
-          : "Please upload a .txt or .srt file before generating.",
-      );
+      setErrorMessage(problem);
       if (inputMode === "paste") {
         document.getElementById("paste-input")?.focus();
       } else {
@@ -945,7 +1017,7 @@ export default function Home() {
     uploadedText,
   ]);
 
-  const showBento = output.length > 0 || status === "loading";
+  const showBento = output.trim().length > 0 || status === "loading";
   const streaming = status === "loading";
 
   return (
@@ -1093,8 +1165,8 @@ export default function Home() {
                     <input
                       ref={inputRef}
                       type="file"
-                      accept=".txt,.srt,text/plain"
-                      aria-label="Upload a sermon transcript, .txt or .srt"
+                      accept=".txt,.srt,.vtt,text/plain"
+                      aria-label="Upload a sermon transcript, .txt, .srt, or .vtt"
                       className="sr-only"
                       onChange={(e) => {
                         const f = e.target.files;
@@ -1110,7 +1182,7 @@ export default function Home() {
                         Drop your transcript here
                       </p>
                       <p className="mt-2 text-sm text-zinc-400 font-medium">
-                        Supports <span className="text-zinc-300">.txt</span> or <span className="text-zinc-300">.srt</span> files
+                        Supports <span className="text-zinc-300">.txt</span>, <span className="text-zinc-300">.srt</span>, or <span className="text-zinc-300">.vtt</span> files
                       </p>
                     </div>
                   </div>
@@ -1239,10 +1311,27 @@ export default function Home() {
                 </div>
               </div>
 
+              {!streaming && outputIssues.length > 0 && (
+                <div
+                  className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-6 py-4"
+                  role="status"
+                >
+                  {outputIssues.map((issue) => (
+                    <p
+                      key={issue.code}
+                      className="flex items-center justify-center gap-2 text-center text-sm font-bold text-amber-100/90"
+                    >
+                      <TriangleAlert className="size-4 shrink-0" />
+                      {issue.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {sections.length > 0 ? (
                   sections.map((s, i) => {
-                    const isTitlesSection = /^titles\b/i.test(s.title);
+                    const isTitlesSection = isTitlesSectionTitle(s.title);
                     const isClipsSection = isClipsSectionTitle(s.title);
 
                     let cardClassName = "col-span-1";
@@ -1282,10 +1371,19 @@ export default function Home() {
                       );
                     }
                   })
-                ) : (
+                ) : streaming ? (
                   <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
                     <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
                     <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">Constructing View...</p>
+                  </div>
+                ) : (
+                  // A finished response with nothing parseable in it would
+                  // otherwise spin here forever, which reads as a hung page.
+                  <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
+                    <TriangleAlert className="size-10 text-amber-300/70 mx-auto mb-4" />
+                    <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">
+                      Nothing to display
+                    </p>
                   </div>
                 )}
 

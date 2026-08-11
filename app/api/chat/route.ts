@@ -3,6 +3,10 @@ import { streamText } from "ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 import { isRateLimited, clientKey } from "@/lib/rateLimit";
 import { normalizeTranscript } from "@/lib/transcript";
+import {
+  MAX_TRANSCRIPT_CHARACTERS,
+  TOO_LONG_MESSAGE,
+} from "@/lib/transcriptInput";
 
 // Explicitly configure the Google provider to ensure it uses the correct API key
 const google = createGoogleGenerativeAI({
@@ -15,7 +19,6 @@ export const maxDuration = 60;
 const CLIP_MIN_ALLOWED = 15;
 const CLIP_MAX_ALLOWED = 600;
 const CLIP_STEP = 5;
-const MAX_TRANSCRIPT_LENGTH = 150000;
 
 function snapClipSec(n: number): number {
   const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
@@ -73,14 +76,11 @@ export async function POST(req: Request) {
     );
   }
 
-  if (text.length > MAX_TRANSCRIPT_LENGTH) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "Transcript is too long. Please trim it to under 150,000 characters (approximately 2 hours of speech).",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+  if (text.length > MAX_TRANSCRIPT_CHARACTERS) {
+    return new Response(JSON.stringify({ error: TOO_LONG_MESSAGE }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const clips = parseClipBounds(body);
@@ -89,7 +89,20 @@ export async function POST(req: Request) {
       JSON.stringify({
         error: "Invalid clip settings.",
       }),
-      { status: 400 },
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Without this the request reaches the provider, fails after the stream has
+  // already returned 200, and the user sees an empty result with no reason.
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    console.error("AI_ROUTE_ERROR: GOOGLE_GENERATIVE_AI_API_KEY is not set");
+    return new Response(
+      JSON.stringify({
+        error:
+          "The analysis service is not configured right now. Please try again later.",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
     );
   }
 
