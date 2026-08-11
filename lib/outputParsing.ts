@@ -7,7 +7,7 @@ export function parseBentoSections(markdown: string): BentoSection[] {
 
   const preamble = parts[0]?.trim() ?? "";
   if (preamble) {
-    sections.push({ title: "Draft", body: preamble });
+    sections.push({ title: DRAFT_SECTION_TITLE, body: preamble });
   }
 
   for (let index = 1; index < parts.length; index += 1) {
@@ -127,3 +127,18 @@ export function parseClipOptions(body: string): {
 export function isClipsSectionTitle(title: string) {
   return /^clips\b/i.test(title.trim());
 }
+
+export function isTitlesSectionTitle(title: string) {
+  return /^titles\b/i.test(title.trim());
+}
+
+export function isDescriptionSectionTitle(title: string) {
+  return /^description\b/i.test(title.trim());
+}
+
+export function isChaptersSectionTitle(title: string) {
+  return /^chapters\b/i.test(title.trim());
+}
+
+/** The preamble bucket `parseBentoSections()` uses for text before any heading. */
+export const DRAFT_SECTION_TITLE = "Draft";

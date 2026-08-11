@@ -9,6 +9,7 @@ import {
   Info,
   Loader2,
   Trash2,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -26,9 +27,11 @@ import {
 import { parseHistory, type HistoryItem } from "@/lib/history";
 import {
   isClipsSectionTitle,
+  isTitlesSectionTitle,
   parseBentoSections,
   parseClipOptions,
 } from "@/lib/outputParsing";
+import { describeOutputIssues, type OutputIssue } from "@/lib/outputHealth";
 import { normalizeTranscript } from "@/lib/transcript";
 
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
@@ -699,6 +702,7 @@ export default function Home() {
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [limitNotice, setLimitNotice] = useState(false);
+  const [outputIssues, setOutputIssues] = useState<OutputIssue[]>([]);
   const [copied, setCopied] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>(() => {
@@ -744,8 +748,14 @@ export default function Home() {
     setClipMaxSec(item.clipMaxSec);
     setProcessingLabel(item.label);
     setShowHistory(false);
-    setStatus("idle");
-    setErrorMessage(null);
+
+    // Entries saved before empty responses were rejected can still be blank, and
+    // a blank one renders no cards at all. Say so rather than showing an empty page.
+    const issues = describeOutputIssues(item.output);
+    const empty = issues.find((issue) => issue.code === "empty");
+    setStatus(empty ? "error" : "idle");
+    setErrorMessage(empty ? empty.message : null);
+    setOutputIssues(empty ? [] : issues);
   };
 
   const sections = useMemo(() => parseBentoSections(output), [output]);
@@ -763,7 +773,7 @@ export default function Home() {
   }, []);
 
   const streamChatResponse = useCallback(
-    async (text: string, minSec: number, maxSec: number, label: string) => {
+    async (text: string, minSec: number, maxSec: number): Promise<string> => {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -800,9 +810,9 @@ export default function Home() {
 
       accumulated += decoder.decode();
       setOutput(accumulated);
-      saveToHistory(label, accumulated, minSec, maxSec);
+      return accumulated;
     },
-    [saveToHistory],
+    [],
   );
 
   const runWithText = useCallback(
@@ -816,10 +826,25 @@ export default function Home() {
       setOutput("");
       setErrorMessage(null);
       setLimitNotice(false);
+      setOutputIssues([]);
       setStatus("loading");
 
       try {
-        await streamChatResponse(text, minSec, maxSec, label);
+        const result = await streamChatResponse(text, minSec, maxSec);
+
+        // The response headers arrive before the model emits a single token, so
+        // a 200 is no promise of usable content. Inspect what actually streamed.
+        const issues = describeOutputIssues(result);
+        const empty = issues.find((issue) => issue.code === "empty");
+        if (empty) {
+          setOutput("");
+          setStatus("error");
+          setErrorMessage(empty.message);
+          return;
+        }
+
+        saveToHistory(label, result, minSec, maxSec);
+        setOutputIssues(issues);
         setLimitNotice(false);
         setStatus("idle");
       } catch (e) {
@@ -835,7 +860,7 @@ export default function Home() {
         );
       }
     },
-    [streamChatResponse],
+    [saveToHistory, streamChatResponse],
   );
 
   const handleFiles = useCallback(
@@ -899,6 +924,7 @@ export default function Home() {
     setPastedText("");
     setErrorMessage(null);
     setLimitNotice(false);
+    setOutputIssues([]);
     setStatus("idle");
     setCopied(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -945,7 +971,7 @@ export default function Home() {
     uploadedText,
   ]);
 
-  const showBento = output.length > 0 || status === "loading";
+  const showBento = output.trim().length > 0 || status === "loading";
   const streaming = status === "loading";
 
   return (
@@ -1239,10 +1265,27 @@ export default function Home() {
                 </div>
               </div>
 
+              {!streaming && outputIssues.length > 0 && (
+                <div
+                  className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-6 py-4"
+                  role="status"
+                >
+                  {outputIssues.map((issue) => (
+                    <p
+                      key={issue.code}
+                      className="flex items-center justify-center gap-2 text-center text-sm font-bold text-amber-100/90"
+                    >
+                      <TriangleAlert className="size-4 shrink-0" />
+                      {issue.message}
+                    </p>
+                  ))}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {sections.length > 0 ? (
                   sections.map((s, i) => {
-                    const isTitlesSection = /^titles\b/i.test(s.title);
+                    const isTitlesSection = isTitlesSectionTitle(s.title);
                     const isClipsSection = isClipsSectionTitle(s.title);
 
                     let cardClassName = "col-span-1";
@@ -1282,10 +1325,19 @@ export default function Home() {
                       );
                     }
                   })
-                ) : (
+                ) : streaming ? (
                   <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
                     <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
                     <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">Constructing View...</p>
+                  </div>
+                ) : (
+                  // A finished response with nothing parseable in it would
+                  // otherwise spin here forever, which reads as a hung page.
+                  <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
+                    <TriangleAlert className="size-10 text-amber-300/70 mx-auto mb-4" />
+                    <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">
+                      Nothing to display
+                    </p>
                   </div>
                 )}
 
