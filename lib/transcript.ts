@@ -7,7 +7,7 @@ const TIMECODE = `(?:${FRAME_TIMECODE}|${MILLISECOND_TIMECODE})`;
 
 // The range separator stays a literal " - " with whitespace on both sides. SRT
 // and WebVTT cue lines separate their timestamps with "-->", which cannot match
-// this, so caption files keep passing through untouched.
+// this, so caption files fall through to the caption path below instead.
 const PREMIERE_RANGE = new RegExp(`^(${TIMECODE})\\s+-\\s+(${TIMECODE})$`);
 
 const TIMECODE_PARTS = /^(\d{2}:\d{2}:\d{2})([:;.,])(\d{2,3})$/;

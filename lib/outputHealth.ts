@@ -1,3 +1,5 @@
+// The explicit .ts extension lets `npm test` load this under
+// --experimental-strip-types, which does not resolve extensionless imports.
 import {
   DRAFT_SECTION_TITLE,
   isChaptersSectionTitle,
@@ -5,7 +7,6 @@ import {
   isDescriptionSectionTitle,
   isTitlesSectionTitle,
   parseBentoSections,
-// Explicit extension so `npm test` can load this under --experimental-strip-types.
 } from "./outputParsing.ts";
 
 export type OutputIssueCode = "empty" | "unstructured" | "missing-sections";
