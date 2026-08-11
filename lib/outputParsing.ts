@@ -1,8 +1,7 @@
 export type BentoSection = { title: string; body: string };
 
-export function parseBentoSections(markdown: string): BentoSection[] {
-  const trimmed = markdown.replace(/^\uFEFF/, "");
-  const parts = trimmed.split(/^###\s+/m);
+function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
+  const parts = markdown.split(heading);
   const sections: BentoSection[] = [];
 
   const preamble = parts[0]?.trim() ?? "";
@@ -21,6 +20,23 @@ export function parseBentoSections(markdown: string): BentoSection[] {
   }
 
   return sections;
+}
+
+function hasHeadedSection(sections: BentoSection[]): boolean {
+  return sections.some((section) => section.title !== DRAFT_SECTION_TITLE);
+}
+
+export function parseBentoSections(markdown: string): BentoSection[] {
+  const trimmed = markdown.replace(/^\uFEFF/, "");
+  const sections = splitOnHeading(trimmed, /^###\s+/m);
+  if (hasHeadedSection(sections)) return sections;
+
+  // The prompt asks for "### " headings, but a model that answers with "## "
+  // instead would otherwise collapse into one untitled card. Only "##" is worth
+  // retrying: "####" is plausible as a subheading inside a well formed section,
+  // so falling back to it could shred a response rather than rescue one.
+  const relaxed = splitOnHeading(trimmed, /^##\s+/m);
+  return hasHeadedSection(relaxed) ? relaxed : sections;
 }
 
 export const CLIP_FIELD_LABELS = [
@@ -42,6 +58,56 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Wordings seen instead of the labels the prompt asks for. The model is told to
+ * use the canonical label, but a near miss should still fill the card rather
+ * than drop the whole Clips section back to raw Markdown.
+ */
+const CLIP_FIELD_ALIASES: Record<ClipFieldKey, string[]> = {
+  Timestamps: ["Timestamps", "Timestamp", "Time", "Times"],
+  Duration: ["Duration", "Length"],
+  Title: ["Title", "Hook"],
+  Transcript: ["Transcript", "Quote"],
+  Description: ["Description", "Context"],
+  "Why it works": ["Why it works", "Why this works", "Why"],
+};
+
+/**
+ * Matches one field label at the head of a line, tolerating the decorations
+ * models add around it: a list bullet, bold or italic markers either side of the
+ * colon, and surrounding whitespace. A colon is always required, so ordinary
+ * prose starting with one of these words is not mistaken for a label.
+ */
+function fieldLabelPattern(aliases: string[]): RegExp {
+  const alternatives = aliases.map(escapeRegExp).join("|");
+  return new RegExp(
+    `^\\s*(?:[-*+]\\s+)?[*_]{0,2}\\s*(?:${alternatives})\\s*[*_]{0,2}\\s*:\\s*[*_]{0,2}\\s*(.*)$`,
+    "i",
+  );
+}
+
+const CLIP_FIELD_PATTERNS = CLIP_FIELD_LABELS.map(
+  (key) => [key, fieldLabelPattern(CLIP_FIELD_ALIASES[key])] as const,
+);
+
+/**
+ * Matches a line that is nothing but an option header. Bold markers, a heading
+ * prefix, a list bullet, and trailing punctuation are all tolerated, but the
+ * header has to be the entire line: a clip whose transcript quotes "Option 1"
+ * mid sentence must not start a new block.
+ */
+const OPTION_HEADER =
+  /^\s*(?:[-*+]\s+)?(?:#{1,6}\s*)?[*_]{0,2}\s*(?:option|clip)\s*#?\s*\d{1,2}\s*[*_]{0,2}\s*[:.)]?\s*[*_]{0,2}\s*$/i;
+
+function cleanOptionLabel(line: string): string {
+  const cleaned = line
+    .replace(/[*_#]/g, "")
+    .replace(/^\s*[-+]\s+/, "")
+    .replace(/[:.)]\s*$/, "")
+    .trim();
+  return cleaned || "Option";
+}
+
 export function parseClipFieldLines(
   block: string,
 ): Partial<Record<ClipFieldKey, string>> {
@@ -59,13 +125,8 @@ export function parseClipFieldLines(
     let matchedKey: ClipFieldKey | null = null;
     let valuePart = "";
 
-    for (const key of CLIP_FIELD_LABELS) {
-      const starred = new RegExp(
-        `^\\s*\\*\\*${escapeRegExp(key)}\\*\\*\\s*:\\s*(.*)$`,
-        "i",
-      );
-      const plain = new RegExp(`^\\s*${escapeRegExp(key)}\\s*:\\s*(.*)$`, "i");
-      const match = line.match(starred) ?? line.match(plain);
+    for (const [key, pattern] of CLIP_FIELD_PATTERNS) {
+      const match = line.match(pattern);
       if (match) {
         matchedKey = key;
         valuePart = match[1]?.trim() ?? "";
@@ -95,7 +156,7 @@ export function splitClipOptionBlocks(
   let current: string[] | null = null;
 
   for (const line of lines) {
-    if (/^Option\s+[123]\s*$/i.test(line.trim())) {
+    if (OPTION_HEADER.test(line)) {
       if (current) blocks.push(current.join("\n"));
       current = [line];
     } else if (current) {
@@ -117,7 +178,7 @@ export function parseClipOptions(body: string): {
   const clips = blocks.map((block) => {
     const lines = block.split("\n");
     return {
-      optionLabel: lines[0]?.trim() || "Option",
+      optionLabel: cleanOptionLabel(lines[0] ?? ""),
       ...parseClipFieldLines(lines.slice(1).join("\n")),
     };
   });

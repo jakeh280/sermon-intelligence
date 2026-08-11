@@ -24,7 +24,13 @@ import {
   formatDurationSec,
   snapClipSec,
 } from "@/lib/clipRange";
-import { parseHistory, type HistoryItem } from "@/lib/history";
+import { type HistoryItem } from "@/lib/history";
+import {
+  clearStoredHistory,
+  historyStorage,
+  readHistory,
+  writeHistory,
+} from "@/lib/historyStorage";
 import {
   isClipsSectionTitle,
   isTitlesSectionTitle,
@@ -32,7 +38,18 @@ import {
   parseClipOptions,
 } from "@/lib/outputParsing";
 import { describeOutputIssues, type OutputIssue } from "@/lib/outputHealth";
+import {
+  describeRequestFailure,
+  STALL_TIMEOUT_MS,
+  StalledResponseError,
+} from "@/lib/requestErrors";
 import { normalizeTranscript } from "@/lib/transcript";
+import {
+  ACCEPTED_EXTENSIONS_LABEL,
+  decodeTranscriptBytes,
+  describeFileProblem,
+  describeTranscriptProblem,
+} from "@/lib/transcriptInput";
 
 // Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
 // sits on top and contrast already passes comfortably.
@@ -41,8 +58,6 @@ const ACCENT = "#0B6ED0";
 // as text measures 3.79:1, under the WCAG 4.5:1 minimum; #3B93E8 measures 5.96:1.
 // It appears as a literal in Tailwind classes rather than a constant, because
 // arbitrary values have to be statically visible to the Tailwind compiler.
-const ACCEPTED = new Set([".txt", ".srt"]);
-
 const COMMUNITY_DISCLAIMER =
   "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone.";
 
@@ -69,11 +84,6 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
     "isAiLimit" in e &&
     (e as { isAiLimit?: boolean }).isAiLimit === true
   );
-}
-
-function extension(name: string) {
-  const i = name.lastIndexOf(".");
-  return i >= 0 ? name.slice(i).toLowerCase() : "";
 }
 
 const markdownComponents: NonNullable<
@@ -705,14 +715,14 @@ export default function Home() {
   const [outputIssues, setOutputIssues] = useState<OutputIssue[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const [history, setHistory] = useState<HistoryItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    return parseHistory(localStorage.getItem("sermon_history"));
-  });
+  const [history, setHistory] = useState<HistoryItem[]>(() =>
+    readHistory(historyStorage()),
+  );
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
 
-  // Save history helper
+  // Save history helper. Storage can refuse the write (private browsing, quota),
+  // so state follows whatever actually persisted rather than assuming it stuck.
   const saveToHistory = useCallback((label: string, text: string, min: number, max: number) => {
     const newItem: HistoryItem = {
       id: crypto.randomUUID(),
@@ -722,24 +732,21 @@ export default function Home() {
       clipMinSec: min,
       clipMaxSec: max,
     };
-    setHistory((prev) => {
-      const next = [newItem, ...prev].slice(0, 10); // Keep last 10
-      localStorage.setItem("sermon_history", JSON.stringify(next));
-      return next;
-    });
+    setHistory((prev) => writeHistory(historyStorage(), [newItem, ...prev]));
   }, []);
 
   const deleteHistoryItem = (id: string) => {
-    setHistory((prev) => {
-      const next = prev.filter((i) => i.id !== id);
-      localStorage.setItem("sermon_history", JSON.stringify(next));
-      return next;
-    });
+    setHistory((prev) =>
+      writeHistory(
+        historyStorage(),
+        prev.filter((i) => i.id !== id),
+      ),
+    );
   };
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem("sermon_history");
+    clearStoredHistory(historyStorage());
   };
 
   const loadFromHistory = (item: HistoryItem) => {
@@ -774,43 +781,69 @@ export default function Home() {
 
   const streamChatResponse = useCallback(
     async (text: string, minSec: number, maxSec: number): Promise<string> => {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          clipMinSec: minSec,
-          clipMaxSec: maxSec,
-        }),
-      });
-      if (!res.ok) {
-        if (isAiLimitHttpStatus(res.status)) {
-          throw aiLimitError();
+      // Nothing else bounds this request from the client's side. Without a stall
+      // guard a dropped connection leaves the spinner running with no way out.
+      const controller = new AbortController();
+      let stalled = false;
+      let stallTimer = 0;
+      const armStallTimer = () => {
+        window.clearTimeout(stallTimer);
+        stallTimer = window.setTimeout(() => {
+          stalled = true;
+          controller.abort();
+        }, STALL_TIMEOUT_MS);
+      };
+
+      armStallTimer();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            clipMinSec: minSec,
+            clipMaxSec: maxSec,
+          }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          if (isAiLimitHttpStatus(res.status)) {
+            throw aiLimitError();
+          }
+          let detail = res.statusText;
+          try {
+            const err = (await res.json()) as { error?: string };
+            if (err.error) detail = err.error;
+          } catch { /* ignore */ }
+          throw new Error(detail || "Request failed");
         }
-        let detail = res.statusText;
-        try {
-          const err = (await res.json()) as { error?: string };
-          if (err.error) detail = err.error;
-        } catch { /* ignore */ }
-        throw new Error(detail || "Request failed");
-      }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No response body");
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      const decoder = new TextDecoder();
-      let accumulated = "";
+        const decoder = new TextDecoder();
+        let accumulated = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Each chunk re-arms the timer, so a long but healthy generation is
+          // never cut off. Only silence counts against it.
+          armStallTimer();
+          accumulated += decoder.decode(value, { stream: true });
+          setOutput(accumulated);
+        }
+
+        accumulated += decoder.decode();
         setOutput(accumulated);
+        return accumulated;
+      } catch (e) {
+        if (stalled) throw new StalledResponseError();
+        throw e;
+      } finally {
+        window.clearTimeout(stallTimer);
       }
-
-      accumulated += decoder.decode();
-      setOutput(accumulated);
-      return accumulated;
     },
     [],
   );
@@ -855,9 +888,7 @@ export default function Home() {
           return;
         }
         setStatus("error");
-        setErrorMessage(
-          e instanceof Error ? e.message : "Something went wrong",
-        );
+        setErrorMessage(describeRequestFailure(e));
       }
     },
     [saveToHistory, streamChatResponse],
@@ -869,16 +900,30 @@ export default function Home() {
       const file = list[0];
       if (!file) return;
 
-      const ext = extension(file.name);
-      if (!ACCEPTED.has(ext)) {
+      const fileProblem = describeFileProblem(file);
+      if (fileProblem) {
         setStatus("error");
-        setErrorMessage("Please upload a .txt or .srt file.");
+        setErrorMessage(fileProblem);
         return;
       }
 
       const reader = new FileReader();
       reader.onload = () => {
-        const text = typeof reader.result === "string" ? reader.result : "";
+        // Read as bytes rather than text so a byte order mark can pick the
+        // encoding. Windows transcript exports are still often UTF-16.
+        const buffer =
+          reader.result instanceof ArrayBuffer ? reader.result : new ArrayBuffer(0);
+        const text = decodeTranscriptBytes(new Uint8Array(buffer));
+
+        const textProblem = describeTranscriptProblem(text, "upload");
+        if (textProblem) {
+          setFileName(null);
+          setUploadedText("");
+          setStatus("error");
+          setErrorMessage(textProblem);
+          return;
+        }
+
         setFileName(file.name);
         setUploadedText(text);
         setErrorMessage(null);
@@ -888,7 +933,7 @@ export default function Home() {
         setStatus("error");
         setErrorMessage("Could not read that file.");
       };
-      reader.readAsText(file);
+      reader.readAsArrayBuffer(file);
     },
     [],
   );
@@ -941,13 +986,13 @@ export default function Home() {
 
     const text = inputMode === "paste" ? pastedText : uploadedText;
     const trimmed = text.trim();
-    if (!trimmed) {
+    const problem =
+      inputMode === "upload" && !fileName
+        ? `Please upload a ${ACCEPTED_EXTENSIONS_LABEL} file before generating.`
+        : describeTranscriptProblem(trimmed, inputMode);
+    if (problem) {
       setStatus("error");
-      setErrorMessage(
-        inputMode === "paste"
-          ? "Please paste a transcript before generating."
-          : "Please upload a .txt or .srt file before generating.",
-      );
+      setErrorMessage(problem);
       if (inputMode === "paste") {
         document.getElementById("paste-input")?.focus();
       } else {
@@ -1119,8 +1164,8 @@ export default function Home() {
                     <input
                       ref={inputRef}
                       type="file"
-                      accept=".txt,.srt,text/plain"
-                      aria-label="Upload a sermon transcript, .txt or .srt"
+                      accept=".txt,.srt,.vtt,text/plain"
+                      aria-label="Upload a sermon transcript, .txt, .srt, or .vtt"
                       className="sr-only"
                       onChange={(e) => {
                         const f = e.target.files;
@@ -1136,7 +1181,7 @@ export default function Home() {
                         Drop your transcript here
                       </p>
                       <p className="mt-2 text-sm text-zinc-400 font-medium">
-                        Supports <span className="text-zinc-300">.txt</span> or <span className="text-zinc-300">.srt</span> files
+                        Supports <span className="text-zinc-300">.txt</span>, <span className="text-zinc-300">.srt</span>, or <span className="text-zinc-300">.vtt</span> files
                       </p>
                     </div>
                   </div>
