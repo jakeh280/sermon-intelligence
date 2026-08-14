@@ -62,7 +62,7 @@ No decision made yet; revisit if/when explored further.
 
 ## System Prompt
 
-**File:** `lib/systemPrompt.ts` — `buildSystemPrompt(clipMinSec, clipMaxSec)` function
+**File:** `lib/systemPrompt.ts` — `buildSystemPrompt(clipMinSec, clipMaxSec, hasTimestamps)` function
 
 Key behaviors:
 - Generates 3 YouTube title options: Human Tension, Theological Point, Biblical Context (5–8 words each)
@@ -74,6 +74,15 @@ Key behaviors:
 - NO em-dashes or unnecessary dashes
 - Double line breaks between sections
 - Clip duration must fall strictly between `clipMinSec` and `clipMaxSec`
+
+`hasTimestamps` is `hasTimestampTags(text)` from `lib/transcript.ts`, computed
+in `app/api/chat/route.ts` from the normalized transcript. When false (no
+`[hh:mm:ss:ff]` tag anywhere, e.g. a transcription export with no per-segment
+timing), the prompt switches to rules that forbid inventing a time: chapters
+lose their `mm:ss` prefix and clips report `Timestamps`/`Duration` as "Not
+available" instead of a fabricated value. `app/page.tsx` also checks this
+client side and shows a warning before the user generates, so they find out
+before spending a request rather than after.
 
 ---
 
@@ -102,6 +111,10 @@ export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 - **Premiere ranges** (`hh:mm:ss:ff - hh:mm:ss:ff`), including drop frame
   semicolons and millisecond variants. `Unknown` speaker labels are dropped;
   named speakers are kept.
+- **DaVinci Resolve ranges** are the same shape wrapped in one pair of square
+  brackets (`[hh:mm:ss:ff - hh:mm:ss:ff]`), with the sentence starting on the
+  very next line and no speaker line at all. The bracket pair is stripped
+  before matching, so it reuses the Premiere range path.
 - **SRT and WebVTT cues** are converted to the same tags, dropping cue indices
   and metadata blocks. Cue text is never rewritten, so inline markup survives
   and the prompt's verbatim clip rule still holds.
@@ -136,6 +149,14 @@ headers behind bold, headings or bullets; field labels with the colon inside the
 bold; and a fallback to `## ` headings when a response contains no `### ` at
 all. An option header must still be the entire line, so quoted text cannot split
 a clip.
+
+The model sometimes over-applies "every section starts with `### `" and gives
+each individual chapter its own heading instead of listing them under one
+`### Chapters` heading, which would otherwise shred into an empty "Chapters"
+card plus one near-empty card per chapter. Any `### ` (or `## `, through the
+fallback) heading that isn't one of the four the prompt defines (Titles,
+Description, Chapters, Clips) is folded back into the section before it as a
+list line instead of kept as its own section.
 
 `lib/outputHealth.ts` inspects a **completed** response and reports empty,
 unstructured, or missing-section results. Never run it mid stream: a partial
@@ -218,8 +239,30 @@ Uses browser `localStorage`:
 
 Public share links, server-side output storage, and output feedback are
 intentionally deferred. Do not add them without first deciding retention,
-deletion, privacy disclosure, and abuse-protection requirements. A public demo
-is also pending a real, attributed example transcript and output from Jake.
+deletion, privacy disclosure, and abuse-protection requirements.
+
+## Public Demo
+
+**File:** `lib/demoContent.ts`
+
+The "View Demo" button (header, next to History) loads a frozen, real,
+attributed example: `DEMO_OUTPUT` is a genuine past `gemini-3.5-flash-lite`
+response to a real sermon transcript, hand checked against the STRICT
+VERBATIM RULE and METADATA ANCHOR RULE in `lib/systemPrompt.ts`, then frozen
+as a static asset. It is not regenerated per view: no request is sent, no
+rate limit slot is spent, and the content can't drift between visits.
+
+Used with permission (Jake works at the church). `DEMO_ATTRIBUTION` names the
+speaker and church and links to the church's site; that attribution renders
+in a clearly labeled banner (`app/page.tsx`, `isDemo` state) whenever the demo
+is showing, and "Try Your Own Transcript" resets back to the normal input
+flow. `tests/demoContent.test.ts` guards the frozen asset against a careless
+hand edit: it must still parse into exactly the four canonical sections and
+avoid the banned filler phrases.
+
+If you add more demo entries or swap this one out, hold the replacement to
+the same bar: a real transcript, permission to feature it, and a hand
+verified output, not a live generation.
 
 ---
 

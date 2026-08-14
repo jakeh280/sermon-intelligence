@@ -143,3 +143,58 @@ test("a response with no headings at all stays a single draft section", () => {
     { title: "Draft", body: "Synthetic prose with no headings." },
   ]);
 });
+
+test("chapters heading-ified one per line are folded back into one Chapters card", () => {
+  // Reproduces the shape seen in production: the model starts every chapter
+  // with "### " too, leaving "### Chapters" empty and each chapter as its own
+  // near-empty section instead of a list under it.
+  const sections = parseBentoSections(
+    "### Titles\nSynthetic title\n\n### Chapters\n\n### 00:00 Introduction\n\n### 02:00 When the Brook Dries Up\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Titles", "Chapters", "Clips"],
+  );
+  const chapters = sections.find((section) => section.title === "Chapters");
+  assert.equal(
+    chapters?.body,
+    "- 00:00 Introduction\n- 02:00 When the Brook Dries Up",
+  );
+});
+
+test("a stray heading with its own body keeps that body on the merged line", () => {
+  // Confirmed separately (remark-parse + remark-gfm) that this unindented
+  // continuation line is a GFM lazy continuation: it stays part of the
+  // "02:00" list item's paragraph rather than breaking the list, so the
+  // leaked sentence renders attached to its chapter instead of shredding it.
+  const sections = parseBentoSections(
+    "### Chapters\n- 00:00 Introduction\n\n### 02:00 A Chapter With Body\nExtra sentence that leaked under the stray heading.\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  const chapters = sections.find((section) => section.title === "Chapters");
+  assert.equal(
+    chapters?.body,
+    "- 00:00 Introduction\n- 02:00 A Chapter With Body\nExtra sentence that leaked under the stray heading.",
+  );
+});
+
+test("a stray heading before any canonical section is kept as its own card", () => {
+  // No prior section to fold into, so this is left alone rather than dropped.
+  const sections = parseBentoSections("### 00:00 Introduction\nSynthetic body.");
+  assert.deepEqual(sections, [
+    { title: "00:00 Introduction", body: "Synthetic body." },
+  ]);
+});
+
+test("heading-ified chapters are also merged through the h2 fallback path", () => {
+  const sections = parseBentoSections(
+    "## Chapters\n\n## 00:00 Introduction\n\n## Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Chapters", "Clips"],
+  );
+  assert.equal(
+    sections.find((section) => section.title === "Chapters")?.body,
+    "- 00:00 Introduction",
+  );
+});

@@ -26,17 +26,59 @@ function hasHeadedSection(sections: BentoSection[]): boolean {
   return sections.some((section) => section.title !== DRAFT_SECTION_TITLE);
 }
 
+/** True for the four section titles the prompt actually defines, plus the preamble bucket. */
+function isCanonicalSectionTitle(title: string): boolean {
+  return (
+    title === DRAFT_SECTION_TITLE ||
+    isTitlesSectionTitle(title) ||
+    isDescriptionSectionTitle(title) ||
+    isChaptersSectionTitle(title) ||
+    isClipsSectionTitle(title)
+  );
+}
+
+/**
+ * A model that takes "every section MUST start with '### '" too literally
+ * will sometimes heading-ify each individual chapter (or other list entry)
+ * instead of listing them as plain lines under one "### Chapters" heading.
+ * `splitOnHeading` then shreds that into one empty "Chapters" card plus one
+ * near-empty card per chapter, since it has no way to know those headings
+ * weren't real sections.
+ *
+ * The prompt only ever defines four headings (Titles, Description, Chapters,
+ * Clips), so any other "### " heading is folded back into the section before
+ * it as a list line rather than kept as its own card. This runs after both
+ * the "###" and the "##" fallback split, so it also cleans up a "##"
+ * response that drifts the same way.
+ */
+function mergeStraySections(sections: BentoSection[]): BentoSection[] {
+  const merged: BentoSection[] = [];
+
+  for (const section of sections) {
+    const previous = merged[merged.length - 1];
+    if (isCanonicalSectionTitle(section.title) || !previous) {
+      merged.push({ ...section });
+      continue;
+    }
+
+    const line = section.body ? `${section.title}\n${section.body}` : section.title;
+    previous.body = previous.body ? `${previous.body}\n- ${line}` : `- ${line}`;
+  }
+
+  return merged;
+}
+
 export function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
   const sections = splitOnHeading(trimmed, /^###\s+/m);
-  if (hasHeadedSection(sections)) return sections;
+  if (hasHeadedSection(sections)) return mergeStraySections(sections);
 
   // The prompt asks for "### " headings, but a model that answers with "## "
   // instead would otherwise collapse into one untitled card. Only "##" is worth
   // retrying: "####" is plausible as a subheading inside a well formed section,
   // so falling back to it could shred a response rather than rescue one.
   const relaxed = splitOnHeading(trimmed, /^##\s+/m);
-  return hasHeadedSection(relaxed) ? relaxed : sections;
+  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : sections;
 }
 
 export const CLIP_FIELD_LABELS = [

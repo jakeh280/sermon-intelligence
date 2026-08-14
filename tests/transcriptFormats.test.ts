@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeTranscript } from "../lib/transcript.ts";
+import { hasTimestampTags, normalizeTranscript } from "../lib/transcript.ts";
 
 // Every fixture here is synthetic. No church transcript text belongs in this repo.
 
@@ -35,6 +35,40 @@ Synthetic sentence for millisecond coverage.`;
 
   assert.equal(normalizeTranscript(dotted), expected);
   assert.equal(normalizeTranscript(comma), expected);
+});
+
+test("DaVinci Resolve ranges wrapped in brackets become prompt tags", () => {
+  const resolve = `[00:00:00:11 - 00:00:13:03]
+Synthetic opening sentence for DaVinci Resolve coverage.
+
+[00:00:14:08 - 00:00:45:04]
+Synthetic second sentence for DaVinci Resolve coverage.`;
+  assert.equal(
+    normalizeTranscript(resolve),
+    `[00:00:00:11]
+Synthetic opening sentence for DaVinci Resolve coverage.
+
+[00:00:14:08]
+Synthetic second sentence for DaVinci Resolve coverage.`,
+  );
+});
+
+test("bracketed DaVinci Resolve ranges also accept drop frame and millisecond variants", () => {
+  const dropFrame = `[00:00:00;03 - 00:00:23;14]
+Synthetic drop frame line.`;
+  assert.equal(
+    normalizeTranscript(dropFrame),
+    `[00:00:00:03]
+Synthetic drop frame line.`,
+  );
+
+  const milliseconds = `[00:01:02.500 - 00:01:09.750]
+Synthetic millisecond line.`;
+  assert.equal(
+    normalizeTranscript(milliseconds),
+    `[00:01:02:00]
+Synthetic millisecond line.`,
+  );
 });
 
 test("a single export may mix frame and millisecond notation", () => {
@@ -252,6 +286,7 @@ test("normalizing an already normalized transcript changes nothing", () => {
     "00:00:00:03 - 00:00:23:14\nUnknown\nSynthetic frame fixture.",
     "00:00:00;03 - 00:00:23;14\nUnknown\nSynthetic drop frame fixture.",
     "00:00:00.030 - 00:00:23.140\nUnknown\nSynthetic millisecond fixture.",
+    "[00:00:00:03 - 00:00:23:14]\nSynthetic DaVinci Resolve fixture.",
     "1\n00:00:01,000 --> 00:00:03,000\nSynthetic SRT fixture.",
     "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nSynthetic WebVTT fixture.",
   ];
@@ -282,6 +317,33 @@ test("very long caption files convert every cue", () => {
   assert.equal(lines[0], "[00:00:00:00]");
   assert.equal(lines[1], "Synthetic cue line 0.");
   assert.equal(lines[lines.length - 1], `Synthetic cue line ${cues - 1}.`);
+});
+
+test("hasTimestampTags is false for a transcript with no timing at all", () => {
+  // The shape a "whole text" transcription export produces: one continuous
+  // block of prose, no timestamps anywhere, not even a newline.
+  const untimed =
+    "Synthetic sermon prose with no timestamps anywhere in it at all.";
+  assert.equal(hasTimestampTags(normalizeTranscript(untimed)), false);
+});
+
+test("hasTimestampTags is true once a transcript normalizes to prompt tags", () => {
+  const premiere = "00:00:00:03 - 00:00:23:14\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(premiere)), true);
+
+  const resolve = "[00:00:00:11 - 00:00:13:03]\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(resolve)), true);
+
+  const srt = "1\n00:00:01,000 --> 00:00:03,000\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(srt)), true);
+});
+
+test("hasTimestampTags is false for a caption file this cannot account for", () => {
+  // normalizeTranscript passes this through untouched (all or nothing), so
+  // it should read the same as any other untimed plain text.
+  const noBlankLines =
+    "1\n00:00:01,000 --> 00:00:03,000\nSynthetic first caption.\n2\n00:00:03,500 --> 00:00:07,250\nSynthetic second caption.";
+  assert.equal(hasTimestampTags(normalizeTranscript(noBlankLines)), false);
 });
 
 test("very long transcripts normalize every block", () => {

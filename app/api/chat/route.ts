@@ -2,7 +2,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 import { isRateLimited, clientKey } from "@/lib/rateLimit";
-import { normalizeTranscript } from "@/lib/transcript";
+import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
 import {
   MAX_TRANSCRIPT_CHARACTERS,
   TOO_LONG_MESSAGE,
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
   try {
     const result = streamText({
       model: google("gemini-3.5-flash-lite"),
-      system: buildSystemPrompt(clips.min, clips.max),
+      system: buildSystemPrompt(clips.min, clips.max, hasTimestampTags(text)),
       messages: [
         {
           role: "user",
