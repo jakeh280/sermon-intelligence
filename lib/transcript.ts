@@ -12,8 +12,17 @@ const PREMIERE_RANGE = new RegExp(`^(${TIMECODE})\\s+-\\s+(${TIMECODE})$`);
 
 const TIMECODE_PARTS = /^(\d{2}:\d{2}:\d{2})([:;.,])(\d{2,3})$/;
 
+// DaVinci Resolve's transcript export writes the same range wrapped in a
+// single pair of square brackets, e.g. `[00:00:00:11 - 00:00:13:03]`, with no
+// speaker line and no separate opening/closing bracket line. Stripping one
+// matching pair before matching lets the same range regex cover both shapes.
 function premiereRange(line: string): RegExpMatchArray | null {
-  return line.trim().match(PREMIERE_RANGE);
+  const trimmed = line.trim();
+  const unwrapped =
+    trimmed.startsWith("[") && trimmed.endsWith("]")
+      ? trimmed.slice(1, -1).trim()
+      : trimmed;
+  return unwrapped.match(PREMIERE_RANGE);
 }
 
 /**
@@ -121,9 +130,10 @@ function normalizeCaptions(lines: string[]): string | null {
 }
 
 /**
- * Converts Premiere style transcript blocks and caption files into the timestamp
- * tags the analysis prompt expects. Plain text and already tagged transcripts
- * pass through, as does any caption file this cannot parse cleanly.
+ * Converts Premiere/DaVinci Resolve style transcript blocks and caption files
+ * into the timestamp tags the analysis prompt expects. Plain text and already
+ * tagged transcripts pass through, as does any caption file this cannot parse
+ * cleanly.
  *
  * Running this twice is a no-op: the tags it emits contain neither a Premiere
  * range separator nor a cue arrow, so the second pass finds nothing to convert.

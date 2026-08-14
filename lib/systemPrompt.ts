@@ -27,6 +27,7 @@ Structure:
 Generate YouTube chapters using "mm:ss" format.
 TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
 Example: [00:32:04:22] is 32:04.
+FORMAT: List every chapter as a plain line (e.g. "04:49 Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
 
 STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
 STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.

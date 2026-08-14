@@ -102,6 +102,10 @@ export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 - **Premiere ranges** (`hh:mm:ss:ff - hh:mm:ss:ff`), including drop frame
   semicolons and millisecond variants. `Unknown` speaker labels are dropped;
   named speakers are kept.
+- **DaVinci Resolve ranges** are the same shape wrapped in one pair of square
+  brackets (`[hh:mm:ss:ff - hh:mm:ss:ff]`), with the sentence starting on the
+  very next line and no speaker line at all. The bracket pair is stripped
+  before matching, so it reuses the Premiere range path.
 - **SRT and WebVTT cues** are converted to the same tags, dropping cue indices
   and metadata blocks. Cue text is never rewritten, so inline markup survives
   and the prompt's verbatim clip rule still holds.
@@ -136,6 +140,14 @@ headers behind bold, headings or bullets; field labels with the colon inside the
 bold; and a fallback to `## ` headings when a response contains no `### ` at
 all. An option header must still be the entire line, so quoted text cannot split
 a clip.
+
+The model sometimes over-applies "every section starts with `### `" and gives
+each individual chapter its own heading instead of listing them under one
+`### Chapters` heading, which would otherwise shred into an empty "Chapters"
+card plus one near-empty card per chapter. Any `### ` (or `## `, through the
+fallback) heading that isn't one of the four the prompt defines (Titles,
+Description, Chapters, Clips) is folded back into the section before it as a
+list line instead of kept as its own section.
 
 `lib/outputHealth.ts` inspects a **completed** response and reports empty,
 unstructured, or missing-section results. Never run it mid stream: a partial

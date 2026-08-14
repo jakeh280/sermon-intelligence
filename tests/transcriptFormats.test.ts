@@ -37,6 +37,40 @@ Synthetic sentence for millisecond coverage.`;
   assert.equal(normalizeTranscript(comma), expected);
 });
 
+test("DaVinci Resolve ranges wrapped in brackets become prompt tags", () => {
+  const resolve = `[00:00:00:11 - 00:00:13:03]
+Synthetic opening sentence for DaVinci Resolve coverage.
+
+[00:00:14:08 - 00:00:45:04]
+Synthetic second sentence for DaVinci Resolve coverage.`;
+  assert.equal(
+    normalizeTranscript(resolve),
+    `[00:00:00:11]
+Synthetic opening sentence for DaVinci Resolve coverage.
+
+[00:00:14:08]
+Synthetic second sentence for DaVinci Resolve coverage.`,
+  );
+});
+
+test("bracketed DaVinci Resolve ranges also accept drop frame and millisecond variants", () => {
+  const dropFrame = `[00:00:00;03 - 00:00:23;14]
+Synthetic drop frame line.`;
+  assert.equal(
+    normalizeTranscript(dropFrame),
+    `[00:00:00:03]
+Synthetic drop frame line.`,
+  );
+
+  const milliseconds = `[00:01:02.500 - 00:01:09.750]
+Synthetic millisecond line.`;
+  assert.equal(
+    normalizeTranscript(milliseconds),
+    `[00:01:02:00]
+Synthetic millisecond line.`,
+  );
+});
+
 test("a single export may mix frame and millisecond notation", () => {
   const mixed = `00:00:05:00 - 00:00:10:00
 Unknown
@@ -252,6 +286,7 @@ test("normalizing an already normalized transcript changes nothing", () => {
     "00:00:00:03 - 00:00:23:14\nUnknown\nSynthetic frame fixture.",
     "00:00:00;03 - 00:00:23;14\nUnknown\nSynthetic drop frame fixture.",
     "00:00:00.030 - 00:00:23.140\nUnknown\nSynthetic millisecond fixture.",
+    "[00:00:00:03 - 00:00:23:14]\nSynthetic DaVinci Resolve fixture.",
     "1\n00:00:01,000 --> 00:00:03,000\nSynthetic SRT fixture.",
     "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nSynthetic WebVTT fixture.",
   ];
