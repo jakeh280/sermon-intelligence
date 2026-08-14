@@ -9,14 +9,44 @@ export function buildSystemPrompt(
   // ones that would otherwise tell it to report one anyway. Silently
   // inventing timestamps is worse than an honest "not available": a media
   // director could paste a fabricated time straight into YouTube chapters.
-  const chapterTimestampRules = hasTimestamps
-    ? `TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
+  const chaptersSection = hasTimestamps
+    ? `Generate YouTube chapters using "mm:ss" format.
+TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
 Example: [00:32:04:22] is 32:04.
 FORMAT: List every chapter as a plain line (e.g. "04:49 Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
-The first chapter MUST be 00:00 and titled "Start" or "Introduction."`
+The first chapter MUST be 00:00 and titled "Start" or "Introduction."
+
+STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
+STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.
+
+CHAPTER NAMING RULES:
+- Use 1st person plural language (we, us, our) in titles.
+- Focus on "Audience Hooks." Names should describe the value or the "Why" behind the section.
+- NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
+
+Good Examples (Thematic & Punchy):
+04:49 Why We Need Divine Preparation
+16:06 The Cost of Our Purity
+28:00 A Blessing for Our Journey
+33:47 Positioning Us for Revival
+
+Bad Examples (Too granular/Generic):
+04:49 Numbers Chapter 1
+07:15 Military Analogy
+16:36 Leviticus and Purity
+35:40 Final Prayer`
     : `NO TIMESTAMPS IN SOURCE: This transcript has no timing information at all. Do NOT invent, estimate, or guess a time for any chapter.
-FORMAT: List every chapter as a plain line with NO time prefix (e.g. "Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
-The first chapter MUST be titled "Start" or "Introduction."`;
+FORMAT: List every chapter as a plain line with NO time prefix under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
+The first chapter MUST be titled "Start" or "Introduction."
+
+STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
+STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.
+
+CHAPTER NAMING RULES:
+- Use 1st person plural language (we, us, our) in titles.
+- Focus on "Audience Hooks." Names should describe the value or the "Why" behind the section, not the section number.
+- NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
+- Do not reuse any wording from this instruction block itself as a chapter title.`;
 
   const clipTimestampRules = hasTimestamps
     ? `STRICT DURATION RULE: Each clip's duration MUST fall strictly between ${clipMinSec} and ${clipMaxSec} seconds. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.
@@ -52,30 +82,7 @@ Structure:
 - Paragraph 3 (Closing - 1-2 sentences): A natural closing thought.
 
 ### Chapters
-Generate YouTube chapters using "mm:ss" format.
-${chapterTimestampRules}
-
-STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
-STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.
-
-CHAPTER NAMING RULES:
-- Use 1st person plural language (we, us, our) in titles.
-- Focus on "Audience Hooks." Names should describe the value or the "Why" behind the section.
-- NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
-
-These examples show naming style only. Only include the leading "mm:ss " on a chapter line when this transcript actually has timestamps.
-
-Good Examples (Thematic & Punchy):
-04:49 Why We Need Divine Preparation
-16:06 The Cost of Our Purity
-28:00 A Blessing for Our Journey
-33:47 Positioning Us for Revival
-
-Bad Examples (Too granular/Generic):
-04:49 Numbers Chapter 1
-07:15 Military Analogy
-16:36 Leviticus and Purity
-35:40 Final Prayer
+${chaptersSection}
 
 ### Clips
 Identify 3 stand-alone moments.
