@@ -5,6 +5,7 @@ import {
   Check,
   CirclePlay,
   Copy,
+  Eye,
   History,
   Info,
   Loader2,
@@ -45,6 +46,7 @@ import {
   StalledResponseError,
 } from "@/lib/requestErrors";
 import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
+import { DEMO_ATTRIBUTION, DEMO_LABEL, DEMO_OUTPUT } from "@/lib/demoContent";
 import {
   ACCEPTED_EXTENSIONS_LABEL,
   decodeTranscriptBytes,
@@ -721,6 +723,7 @@ export default function Home() {
   );
   const [showHistory, setShowHistory] = useState(false);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
 
   // Save history helper. Storage can refuse the write (private browsing, quota),
   // so state follows whatever actually persisted rather than assuming it stuck.
@@ -973,7 +976,26 @@ export default function Home() {
     setOutputIssues([]);
     setStatus("idle");
     setCopied(false);
+    setIsDemo(false);
     if (inputRef.current) inputRef.current.value = "";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  // Loads the frozen demo output directly, with no request and no rate limit
+  // spent: DEMO_OUTPUT is a real, previously generated and hand verified
+  // result (see lib/demoContent.ts), not something regenerated per view.
+  const viewDemo = useCallback(() => {
+    setOutput(DEMO_OUTPUT);
+    setProcessingLabel(DEMO_LABEL);
+    setFileName(null);
+    setUploadedText("");
+    setPastedText("");
+    setErrorMessage(null);
+    setLimitNotice(false);
+    setOutputIssues([]);
+    setStatus("idle");
+    setCopied(false);
+    setIsDemo(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -1052,13 +1074,22 @@ export default function Home() {
               <span className="h-px w-6 bg-[#0B6ED0]/40 transition-all group-hover:w-12 group-hover:bg-[#0B6ED0]" />
             </a>
 
-            <button
-              onClick={() => setShowHistory(true)}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
-            >
-              <History className="size-3.5" />
-              History
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={viewDemo}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0B6ED0]/10 border border-[#0B6ED0]/20 text-xs font-semibold text-[#7DBEF7] hover:bg-[#0B6ED0]/20 hover:text-white transition-all cursor-pointer"
+              >
+                <Eye className="size-3.5" />
+                View Demo
+              </button>
+              <button
+                onClick={() => setShowHistory(true)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5 text-xs font-semibold text-zinc-400 hover:bg-white/10 hover:text-white transition-all cursor-pointer"
+              >
+                <History className="size-3.5" />
+                History
+              </button>
+            </div>
           </div>
 
           <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl">
@@ -1319,7 +1350,7 @@ export default function Home() {
                     disabled={!output.trim()}
                     className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-transparent px-5 py-2 text-xs font-bold text-zinc-300 transition-all hover:bg-white/5 hover:text-white disabled:opacity-30"
                   >
-                    Analyze Another Sermon
+                    {isDemo ? "Try Your Own Transcript" : "Analyze Another Sermon"}
                   </button>
                   <button
                     type="button"
@@ -1336,6 +1367,28 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+
+              {isDemo && (
+                <div
+                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#0B6ED0]/20 bg-[#0B6ED0]/5 px-6 py-4 text-sm text-zinc-300"
+                  role="status"
+                >
+                  <Eye className="size-4 shrink-0 text-[#5A9FE8]" aria-hidden />
+                  <span className="font-bold text-white">You&apos;re viewing a demo.</span>
+                  <span>
+                    Real sermon by {DEMO_ATTRIBUTION.speaker} at{" "}
+                    <a
+                      href={DEMO_ATTRIBUTION.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-[#3B93E8] underline decoration-[#3B93E8]/40 underline-offset-2 hover:text-[#7DBEF7]"
+                    >
+                      {DEMO_ATTRIBUTION.church}
+                    </a>
+                    , used with permission. Upload your own transcript above to try it for real.
+                  </span>
+                </div>
+              )}
 
               {!streaming && outputIssues.length > 0 && (
                 <div

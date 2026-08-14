@@ -239,8 +239,30 @@ Uses browser `localStorage`:
 
 Public share links, server-side output storage, and output feedback are
 intentionally deferred. Do not add them without first deciding retention,
-deletion, privacy disclosure, and abuse-protection requirements. A public demo
-is also pending a real, attributed example transcript and output from Jake.
+deletion, privacy disclosure, and abuse-protection requirements.
+
+## Public Demo
+
+**File:** `lib/demoContent.ts`
+
+The "View Demo" button (header, next to History) loads a frozen, real,
+attributed example: `DEMO_OUTPUT` is a genuine past `gemini-3.5-flash-lite`
+response to a real sermon transcript, hand checked against the STRICT
+VERBATIM RULE and METADATA ANCHOR RULE in `lib/systemPrompt.ts`, then frozen
+as a static asset. It is not regenerated per view: no request is sent, no
+rate limit slot is spent, and the content can't drift between visits.
+
+Used with permission (Jake works at the church). `DEMO_ATTRIBUTION` names the
+speaker and church and links to the church's site; that attribution renders
+in a clearly labeled banner (`app/page.tsx`, `isDemo` state) whenever the demo
+is showing, and "Try Your Own Transcript" resets back to the normal input
+flow. `tests/demoContent.test.ts` guards the frozen asset against a careless
+hand edit: it must still parse into exactly the four canonical sections and
+avoid the banned filler phrases.
+
+If you add more demo entries or swap this one out, hold the replacement to
+the same bar: a real transcript, permission to feature it, and a hand
+verified output, not a live generation.
 
 ---
 
