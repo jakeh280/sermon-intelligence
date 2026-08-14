@@ -11,10 +11,10 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.33",
+    "@ai-sdk/google": "^4.0.41",
     "@vercel/analytics": "^2.0.1",
-    "ai": "^7.0.51",
-    "lucide-react": "^1.28.0",
+    "ai": "^7.0.59",
+    "lucide-react": "^1.31.0",
     "next": "^16.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
