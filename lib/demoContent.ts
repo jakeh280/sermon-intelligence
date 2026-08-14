@@ -10,8 +10,12 @@
  * checked against the STRICT VERBATIM RULE and METADATA ANCHOR RULE in
  * lib/systemPrompt.ts (one dropped leading word and one clip's timestamp
  * were off by a few seconds; both corrected here) before being frozen as a
- * static asset. Treat edits to it with the same scrutiny: any change must
- * still be a word for word match against the source transcript.
+ * static asset. The three Titles lines also needed a leading "- " added:
+ * TitlesBentoCard's three-across card layout in app/page.tsx only fires on
+ * an actual markdown list, and the raw response used bare lines. Treat edits
+ * to it with the same scrutiny: any wording change must still be a word for
+ * word match against the source transcript, and check the rendered page
+ * (not just the markdown string) before treating an edit as done.
  */
 
 export const DEMO_ATTRIBUTION = {
@@ -25,9 +29,9 @@ export const DEMO_LABEL =
 
 export const DEMO_OUTPUT = `### Titles
 
-Option 1: When Your Sources of Provision Suddenly Dry Up
-Option 2: Why God Refuses to Fit Into Our Formulas
-Option 3: What the Story of Elijah Teaches Us About Doubt
+- Option 1: When Your Sources of Provision Suddenly Dry Up
+- Option 2: Why God Refuses to Fit Into Our Formulas
+- Option 3: What the Story of Elijah Teaches Us About Doubt
 
 ### Description
 

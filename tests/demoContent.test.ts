@@ -44,3 +44,20 @@ test("the demo has an attribution label and a real church link", () => {
   assert.match(DEMO_LABEL, /Pastor Jay Stewart/);
   assert.equal(DEMO_ATTRIBUTION.url, "https://therefuge.net");
 });
+
+test("the demo's Titles section is a real markdown list, not bare lines", () => {
+  // TitlesBentoCard's three-across card layout (app/page.tsx) only fires when
+  // remark actually parses the body as a list. A caught regression: the first
+  // frozen draft had bare "Option 1: ..." lines with no leading "- ", which
+  // rendered as a single paragraph instead of three styled cards. Confirmed
+  // against the live page (0 <li> elements) before this test was added.
+  const titlesBody = parseBentoSections(DEMO_OUTPUT).find(
+    (section) => section.title === "Titles",
+  )?.body;
+  assert.ok(titlesBody, "Titles section is missing");
+  const lines = titlesBody.trim().split("\n");
+  assert.equal(lines.length, 3, "expected exactly 3 title options");
+  for (const line of lines) {
+    assert.match(line, /^-\s+Option \d/, `not a list item: "${line}"`);
+  }
+});
