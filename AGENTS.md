@@ -62,7 +62,7 @@ No decision made yet; revisit if/when explored further.
 
 ## System Prompt
 
-**File:** `lib/systemPrompt.ts` — `buildSystemPrompt(clipMinSec, clipMaxSec)` function
+**File:** `lib/systemPrompt.ts` — `buildSystemPrompt(clipMinSec, clipMaxSec, hasTimestamps)` function
 
 Key behaviors:
 - Generates 3 YouTube title options: Human Tension, Theological Point, Biblical Context (5–8 words each)
@@ -74,6 +74,15 @@ Key behaviors:
 - NO em-dashes or unnecessary dashes
 - Double line breaks between sections
 - Clip duration must fall strictly between `clipMinSec` and `clipMaxSec`
+
+`hasTimestamps` is `hasTimestampTags(text)` from `lib/transcript.ts`, computed
+in `app/api/chat/route.ts` from the normalized transcript. When false (no
+`[hh:mm:ss:ff]` tag anywhere, e.g. a transcription export with no per-segment
+timing), the prompt switches to rules that forbid inventing a time: chapters
+lose their `mm:ss` prefix and clips report `Timestamps`/`Duration` as "Not
+available" instead of a fabricated value. `app/page.tsx` also checks this
+client side and shows a warning before the user generates, so they find out
+before spending a request rather than after.
 
 ---
 

@@ -171,3 +171,17 @@ export function normalizeTranscript(input: string): string {
 
   return output.join("\n");
 }
+
+const PROMPT_TAG = /\[\d{2}:\d{2}:\d{2}:\d{2}\]/;
+
+/**
+ * True when the (already normalized) transcript contains at least one
+ * `[hh:mm:ss:ff]` tag, meaning the model has something to anchor chapter and
+ * clip timestamps to. A transcription export with no timing at all (e.g. a
+ * "whole text" export with no per-segment timestamps) normalizes to itself
+ * unchanged and has none, which callers use to warn the user before asking
+ * the model to invent times it has no basis for.
+ */
+export function hasTimestampTags(normalized: string): boolean {
+  return PROMPT_TAG.test(normalized);
+}

@@ -1,4 +1,32 @@
-export function buildSystemPrompt(clipMinSec: number, clipMaxSec: number): string {
+export function buildSystemPrompt(
+  clipMinSec: number,
+  clipMaxSec: number,
+  hasTimestamps: boolean,
+): string {
+  // hasTimestamps is false when the transcript has no [hh:mm:ss:ff] tags at
+  // all (e.g. a "whole text" export with no per-segment timing). The model
+  // has nothing to anchor a time to in that case, so these rules replace the
+  // ones that would otherwise tell it to report one anyway. Silently
+  // inventing timestamps is worse than an honest "not available": a media
+  // director could paste a fabricated time straight into YouTube chapters.
+  const chapterTimestampRules = hasTimestamps
+    ? `TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
+Example: [00:32:04:22] is 32:04.
+FORMAT: List every chapter as a plain line (e.g. "04:49 Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
+The first chapter MUST be 00:00 and titled "Start" or "Introduction."`
+    : `NO TIMESTAMPS IN SOURCE: This transcript has no timing information at all. Do NOT invent, estimate, or guess a time for any chapter.
+FORMAT: List every chapter as a plain line with NO time prefix (e.g. "Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
+The first chapter MUST be titled "Start" or "Introduction."`;
+
+  const clipTimestampRules = hasTimestamps
+    ? `STRICT DURATION RULE: Each clip's duration MUST fall strictly between ${clipMinSec} and ${clipMaxSec} seconds. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.
+STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
+METADATA ANCHOR RULE: Before generating a clip, locate the tag immediately preceding the first word of your quote. You MUST use the timestamp associated with that tag.
+STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.`
+    : `NO TIMESTAMPS IN SOURCE: This transcript has no timing information at all. Do NOT invent, estimate, or guess a "Timestamps" range or "Duration" value. Write exactly "Not available (source transcript has no timestamps)" for both the "Timestamps" and "Duration" fields of every clip.
+STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
+STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.`;
+
   return `You are a church media strategist. Analyze the provided sermon transcript to generate YouTube metadata and social clips that are theologically faithful and accessible to non-churchgoers.
 
 CRITICAL RULES:
@@ -19,24 +47,23 @@ Write a 150–200 word YouTube description. Write as a thoughtful person, not a 
 STRICT RULE: You are banned from using introductory filler. DO NOT use: "we explore", "we look at", "join us", "we discover that", "we learn that", "we find that", "This sermon", or "In this message".
 
 Structure:
-- Paragraph 1 (The Hook - 2 sentences): START IMMEDIATELY with a direct, declarative statement about the human condition, God's character, or the core tension. 
+- Paragraph 1 (The Hook - 2 sentences): START IMMEDIATELY with a direct, declarative statement about the human condition, God's character, or the core tension.
 - Paragraph 2 (The Core Takeaway - 3-4 sentences): Re-state the core message of the sermon in a clear and concise way.
 - Paragraph 3 (Closing - 1-2 sentences): A natural closing thought.
 
 ### Chapters
 Generate YouTube chapters using "mm:ss" format.
-TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
-Example: [00:32:04:22] is 32:04.
-FORMAT: List every chapter as a plain line (e.g. "04:49 Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
+${chapterTimestampRules}
 
 STRICT QUANTITY LIMIT: You are capped at a MAXIMUM of 6 to 9 chapters for this video. Do not exceed this.
 STRICT BROADNESS RULE: Group related teaching points into "Major Movements." Do not create a new chapter for every scripture reference or minor illustration.
 
 CHAPTER NAMING RULES:
-- The first chapter MUST be 00:00 and titled "Start" or "Introduction."
 - Use 1st person plural language (we, us, our) in titles.
 - Focus on "Audience Hooks." Names should describe the value or the "Why" behind the section.
 - NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
+
+These examples show naming style only. Only include the leading "mm:ss " on a chapter line when this transcript actually has timestamps.
 
 Good Examples (Thematic & Punchy):
 04:49 Why We Need Divine Preparation
@@ -52,10 +79,7 @@ Bad Examples (Too granular/Generic):
 
 ### Clips
 Identify 3 stand-alone moments.
-STRICT DURATION RULE: Each clip's duration MUST fall strictly between ${clipMinSec} and ${clipMaxSec} seconds. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.
-STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
-METADATA ANCHOR RULE: Before generating a clip, locate the tag immediately preceding the first word of your quote. You MUST use the timestamp associated with that tag. 
-STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.
+${clipTimestampRules}
 
 Use this exact format:
 

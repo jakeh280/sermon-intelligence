@@ -44,7 +44,7 @@ import {
   STALL_TIMEOUT_MS,
   StalledResponseError,
 } from "@/lib/requestErrors";
-import { normalizeTranscript } from "@/lib/transcript";
+import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
 import {
   ACCEPTED_EXTENSIONS_LABEL,
   decodeTranscriptBytes,
@@ -1020,6 +1020,17 @@ export default function Home() {
   const showBento = output.trim().length > 0 || status === "loading";
   const streaming = status === "loading";
 
+  // Warn before generating, not after: a transcript with no timing at all
+  // (e.g. a "whole text" export) still produces a result, just one where
+  // Chapters and Clips can't report real times. Checked against the same
+  // normalized text handleGenerate() would send.
+  const currentText = inputMode === "paste" ? pastedText : uploadedText;
+  const missingTimestamps = useMemo(() => {
+    const trimmed = currentText.trim();
+    if (!trimmed) return false;
+    return !hasTimestampTags(normalizeTranscript(trimmed));
+  }, [currentText]);
+
   return (
     <main className="flex min-h-full flex-col bg-zinc-950 text-zinc-100 font-sans selection:bg-[#0B6ED0]/30 selection:text-white">
       {/* Background Glow */}
@@ -1088,7 +1099,7 @@ export default function Home() {
               >
                 Transcrisper
               </a>{" "}
-              to get a clean text transcript first.
+              to get a transcript first. Export as <span className="text-zinc-300 font-semibold">SRT</span> or <span className="text-zinc-300 font-semibold">VTT</span>, not TXT, so chapter and clip timestamps carry over.
             </p>
           </div>
         </header>
@@ -1202,6 +1213,21 @@ export default function Home() {
                   placeholder="Paste your verbatim sermon transcript content here..."
                   className="w-full rounded-3xl border border-white/10 bg-white/5 px-6 py-6 text-base leading-7 text-zinc-200 placeholder:text-zinc-400 outline-none transition-all focus:ring-4 focus:ring-[#0B6ED0]/20 focus:border-[#0B6ED0]/50"
                 />
+              )}
+
+              {missingTimestamps && (
+                <div
+                  className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-6 py-4 text-center"
+                  role="status"
+                >
+                  <p className="flex items-center justify-center gap-2 text-sm font-bold text-amber-100/90">
+                    <TriangleAlert className="size-4 shrink-0" />
+                    No timestamps found in this transcript
+                  </p>
+                  <p className="mt-1 text-xs text-amber-100/70">
+                    Chapters and clip timestamps need timing in the source, so they will come back marked as unavailable. If this came from Transcrisper, re-export as SRT or VTT instead of TXT to keep timing.
+                  </p>
+                </div>
               )}
 
               <div className="flex flex-col gap-6">

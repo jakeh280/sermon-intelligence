@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeTranscript } from "../lib/transcript.ts";
+import { hasTimestampTags, normalizeTranscript } from "../lib/transcript.ts";
 
 // Every fixture here is synthetic. No church transcript text belongs in this repo.
 
@@ -317,6 +317,33 @@ test("very long caption files convert every cue", () => {
   assert.equal(lines[0], "[00:00:00:00]");
   assert.equal(lines[1], "Synthetic cue line 0.");
   assert.equal(lines[lines.length - 1], `Synthetic cue line ${cues - 1}.`);
+});
+
+test("hasTimestampTags is false for a transcript with no timing at all", () => {
+  // The shape a "whole text" transcription export produces: one continuous
+  // block of prose, no timestamps anywhere, not even a newline.
+  const untimed =
+    "Synthetic sermon prose with no timestamps anywhere in it at all.";
+  assert.equal(hasTimestampTags(normalizeTranscript(untimed)), false);
+});
+
+test("hasTimestampTags is true once a transcript normalizes to prompt tags", () => {
+  const premiere = "00:00:00:03 - 00:00:23:14\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(premiere)), true);
+
+  const resolve = "[00:00:00:11 - 00:00:13:03]\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(resolve)), true);
+
+  const srt = "1\n00:00:01,000 --> 00:00:03,000\nSynthetic sentence.";
+  assert.equal(hasTimestampTags(normalizeTranscript(srt)), true);
+});
+
+test("hasTimestampTags is false for a caption file this cannot account for", () => {
+  // normalizeTranscript passes this through untouched (all or nothing), so
+  // it should read the same as any other untimed plain text.
+  const noBlankLines =
+    "1\n00:00:01,000 --> 00:00:03,000\nSynthetic first caption.\n2\n00:00:03,500 --> 00:00:07,250\nSynthetic second caption.";
+  assert.equal(hasTimestampTags(normalizeTranscript(noBlankLines)), false);
 });
 
 test("very long transcripts normalize every block", () => {
