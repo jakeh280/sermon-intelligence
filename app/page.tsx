@@ -6,6 +6,7 @@ import {
   CirclePlay,
   Copy,
   Eye,
+  EyeOff,
   History,
   Info,
   Loader2,
@@ -15,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, CSSProperties } from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -703,6 +704,7 @@ function HistoryModal({
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const strategyOutputRef = useRef<HTMLDivElement>(null);
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -754,11 +756,17 @@ export default function Home() {
   };
 
   const loadFromHistory = (item: HistoryItem) => {
+    // Same race as viewDemo(): the History button lives in the header,
+    // outside the block that hides while a generation streams, so without
+    // this guard the in-flight stream's own setOutput calls would overwrite
+    // the loaded history item moments after it appears.
+    if (status === "loading") return;
     setOutput(item.output);
     setClipMinSec(item.clipMinSec);
     setClipMaxSec(item.clipMaxSec);
     setProcessingLabel(item.label);
     setShowHistory(false);
+    setIsDemo(false);
 
     // Entries saved before empty responses were rejected can still be blank, and
     // a blank one renders no cards at all. Say so rather than showing an empty page.
@@ -865,6 +873,7 @@ export default function Home() {
       setLimitNotice(false);
       setOutputIssues([]);
       setStatus("loading");
+      setIsDemo(false);
 
       try {
         const result = await streamChatResponse(text, minSec, maxSec);
@@ -985,6 +994,12 @@ export default function Home() {
   // spent: DEMO_OUTPUT is a real, previously generated and hand verified
   // result (see lib/demoContent.ts), not something regenerated per view.
   const viewDemo = useCallback(() => {
+    // The "View Demo" button lives in the header, outside the
+    // `status !== "loading"` block that hides Generate mid-stream, so it stays
+    // clickable during a real generation. Bailing here (same guard
+    // handleGenerate uses) avoids a race where the in-flight stream's own
+    // setOutput calls overwrite the demo a moment after it appears.
+    if (status === "loading") return;
     setOutput(DEMO_OUTPUT);
     setProcessingLabel(DEMO_LABEL);
     setFileName(null);
@@ -996,8 +1011,25 @@ export default function Home() {
     setStatus("idle");
     setCopied(false);
     setIsDemo(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+    // No scroll call here: the button sits at the very top of the page, so
+    // scrolling to 0 (the pattern used elsewhere) is a no-op when already
+    // there, and the results div doesn't exist in the DOM until this state
+    // change commits. See the isDemo effect below instead.
+  }, [status]);
+
+  // Runs after the results div above has actually committed to the DOM
+  // (unlike requestAnimationFrame, a passive effect isn't tied to the
+  // browser's own paint/compositor loop, so it isn't at risk of being
+  // throttled in a backgrounded or non-visible tab). Only viewDemo sets
+  // isDemo to true, so this only fires for that transition, not for a
+  // normal generate or a history load. Deliberately not "smooth": the
+  // button lives far from the results, and an instant jump is the more
+  // reliable way to make sure the click visibly did something.
+  useEffect(() => {
+    if (isDemo) {
+      strategyOutputRef.current?.scrollIntoView({ block: "start" });
+    }
+  }, [isDemo]);
 
   const handleGenerate = useCallback(async () => {
     if (status === "loading") return;
@@ -1076,11 +1108,26 @@ export default function Home() {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={viewDemo}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0B6ED0]/10 border border-[#0B6ED0]/20 text-xs font-semibold text-[#7DBEF7] hover:bg-[#0B6ED0]/20 hover:text-white transition-all cursor-pointer"
+                onClick={isDemo ? analyzeAnotherSermon : viewDemo}
+                aria-pressed={isDemo}
+                className={[
+                  "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer",
+                  isDemo
+                    ? "bg-[#0B6ED0] border border-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20 hover:bg-[#3d8fe8]"
+                    : "bg-[#0B6ED0]/10 border border-[#0B6ED0]/20 text-[#7DBEF7] hover:bg-[#0B6ED0]/20 hover:text-white",
+                ].join(" ")}
               >
-                <Eye className="size-3.5" />
-                View Demo
+                {isDemo ? (
+                  <>
+                    <EyeOff className="size-3.5" />
+                    Hide Demo
+                  </>
+                ) : (
+                  <>
+                    <Eye className="size-3.5" />
+                    View Demo
+                  </>
+                )}
               </button>
               <button
                 onClick={() => setShowHistory(true)}
@@ -1333,7 +1380,7 @@ export default function Home() {
 
 
           {showBento && (
-            <div className="space-y-6 pt-8 border-t border-white/5">
+            <div ref={strategyOutputRef} id="strategy-output" className="space-y-6 pt-8 border-t border-white/5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400 mb-1">
