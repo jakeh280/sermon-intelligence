@@ -7,6 +7,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Github,
   History,
   Info,
   Loader2,
@@ -1618,6 +1619,13 @@ export default function Home() {
               aria-label="YouTube"
             >
               <CirclePlay className="size-5" />
+            </a>
+            <a
+              href="https://github.com/jakeh280/sermon-intelligence"
+              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
+              aria-label="GitHub"
+            >
+              <Github className="size-5" />
             </a>
           </div>
         </div>
