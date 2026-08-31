@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import type { ComponentProps, CSSProperties } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -640,6 +640,116 @@ function PromoCard({ className }: { className?: string } = {}) {
   );
 }
 
+function ModalFrame({
+  children,
+  onClose,
+  titleId,
+  panelClassName,
+  align = "center",
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  titleId: string;
+  panelClassName: string;
+  align?: "center" | "bottom";
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const previousOverflow = document.body.style.overflow;
+    const dialog = dialogRef.current;
+
+    const focusableElements = () =>
+      Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => element.getClientRects().length > 0);
+
+    const focusFrame = window.requestAnimationFrame(() => {
+      const initialFocus =
+        dialog?.querySelector<HTMLElement>("[data-dialog-initial-focus]") ??
+        focusableElements()[0] ??
+        dialog;
+      initialFocus?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const elements = focusableElements();
+      if (elements.length === 0) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey) {
+        if (activeElement === first || !dialog?.contains(activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (activeElement === last || !dialog?.contains(activeElement)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, []);
+
+  return (
+    <div
+      className={[
+        "fixed inset-0 z-50 flex justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200",
+        align === "bottom"
+          ? "items-end pb-8 sm:items-center"
+          : "items-center",
+      ].join(" ")}
+      onClick={onClose}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={panelClassName}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function HistoryModal({
   items,
   onSelect,
@@ -654,15 +764,24 @@ function HistoryModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-      <div className="relative w-full max-w-md bg-zinc-950 border border-white/10 rounded-2xl shadow-3xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+    <ModalFrame
+      onClose={onClose}
+      titleId="history-dialog-title"
+      panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-3xl animate-in zoom-in-95 duration-200"
+    >
         <header className="flex items-center justify-between p-4 border-b border-white/5">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <History className="size-4" />
+          <h3 id="history-dialog-title" className="text-base font-bold text-white flex items-center gap-2">
+            <History className="size-4" aria-hidden />
             Recent Generations
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-white/5 rounded-lg transition-colors cursor-pointer">
-            <X className="size-5 text-zinc-400" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="cursor-pointer rounded-lg p-2 hover:bg-white/5"
+            aria-label="Close history"
+            data-dialog-initial-focus
+          >
+            <X className="size-5 text-zinc-400" aria-hidden />
           </button>
         </header>
 
@@ -680,6 +799,7 @@ function HistoryModal({
                   className="group flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-white/5 transition-all text-left"
                 >
                   <button
+                    type="button"
                     onClick={() => onSelect(item)}
                     className="flex-1 min-w-0 cursor-pointer text-left"
                   >
@@ -691,10 +811,12 @@ function HistoryModal({
                     </p>
                   </button>
                   <button
+                    type="button"
                     onClick={() => onDelete(item.id)}
-                    className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all cursor-pointer"
+                    className="cursor-pointer rounded-lg p-2 opacity-0 transition-all hover:text-red-400 focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                    aria-label={`Delete ${item.label} from history`}
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-4" aria-hidden />
                   </button>
                 </div>
               ))}
@@ -705,6 +827,7 @@ function HistoryModal({
         {items.length > 0 && (
           <footer className="p-3 border-t border-white/5">
             <button
+              type="button"
               onClick={onClear}
               className="w-full py-2 text-xs font-bold text-red-500/80 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all cursor-pointer"
             >
@@ -712,8 +835,7 @@ function HistoryModal({
             </button>
           </footer>
         )}
-      </div>
-    </div>
+    </ModalFrame>
   );
 }
 
@@ -1158,21 +1280,8 @@ export default function Home() {
             Sermon Intelligence
           </h1>
 
-          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/5 px-3.5 py-1.5 text-xs font-semibold text-amber-300/80">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400/70" />
-            Early access, still in development.{" "}
-            <a
-              href="https://tally.so/r/VL14Rg"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline decoration-amber-400/30 underline-offset-2 hover:text-amber-200 transition-colors"
-            >
-              Send me feedback
-            </a>
-          </div>
-
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-zinc-400 font-medium">
-            Generate a description, YouTube chapters, and social media clips from your sermon transcript.
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-zinc-400 font-medium">
+            Generate YouTube titles and descriptions, chapter markers, and social clip suggestions from your sermon transcript.
           </p>
 
           <div
@@ -1546,34 +1655,34 @@ export default function Home() {
       )}
 
       {showDisclaimer && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center pb-8 sm:items-center"
-          onClick={() => setShowDisclaimer(false)}
+        <ModalFrame
+          onClose={() => setShowDisclaimer(false)}
+          titleId="privacy-dialog-title"
+          align="bottom"
+          panelClassName="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200"
         >
-          <div
-            className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Privacy</h3>
+              <h3 id="privacy-dialog-title" className="text-sm font-bold text-white">Privacy</h3>
               <button
+                type="button"
                 onClick={() => setShowDisclaimer(false)}
-                className="text-zinc-400 hover:text-white transition-colors"
-                aria-label="Close"
+                className="cursor-pointer rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white"
+                aria-label="Close privacy information"
+                data-dialog-initial-focus
               >
-                <X className="size-4" />
+                <X className="size-4" aria-hidden />
               </button>
             </div>
             <ul className="space-y-3 text-xs text-zinc-400 leading-relaxed">
               <li>
-                <span className="font-semibold text-zinc-300">Cloud processing</span> sends your transcript to Google Gemini to create the results. Only submit material you are allowed to share. Google may use inputs to improve their models per their{" "}
+                <span className="font-semibold text-zinc-300">Cloud processing</span> sends your transcript to a billing enabled Google Gemini API project. Google states that prompts and responses from paid services are not used to improve its products, though they may be logged for a limited period for policy enforcement and legal requirements. Only submit material you are allowed to share. Read the{" "}
                 <a
-                  href="https://policies.google.com/terms"
+                  href="https://ai.google.dev/gemini-api/terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#3B93E8] underline underline-offset-2"
                 >
-                  terms of service
+                  Gemini API terms
                 </a>
                 .
               </li>
@@ -1581,20 +1690,28 @@ export default function Home() {
                 <span className="font-semibold text-zinc-300">Local history</span> keeps up to 10 generated results in this browser only. You can remove them at any time from History.
               </li>
               <li>
-                <span className="font-semibold text-zinc-300">Anonymous analytics</span> uses Vercel Web Analytics to understand aggregate traffic, such as page views and referral sources. It does not use cookies or session recordings, and no transcript or generated content is sent to analytics. See Vercel&apos;s{" "}
+                <span className="font-semibold text-zinc-300">Aggregate analytics</span> uses Vercel Web Analytics and Cloudflare Web Analytics to understand page traffic and performance. These analytics tools do not use session recordings, and the app does not send transcript text or generated content to either analytics tool. See{" "}
                 <a
                   href="https://vercel.com/docs/analytics/privacy-policy"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[#3B93E8] underline underline-offset-2"
                 >
-                  privacy information
+                  Vercel&apos;s privacy information
+                </a>{" "}
+                and{" "}
+                <a
+                  href="https://developers.cloudflare.com/web-analytics/about/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#3B93E8] underline underline-offset-2"
+                >
+                  Cloudflare&apos;s analytics information
                 </a>
                 .
               </li>
             </ul>
-          </div>
-        </div>
+        </ModalFrame>
       )}
 
       <footer className="mt-auto border-t border-white/5 bg-black/40 px-6 py-12 backdrop-blur-xl">
@@ -1648,6 +1765,7 @@ export default function Home() {
             © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
           </p>
           <button
+            type="button"
             onClick={() => setShowDisclaimer(true)}
             className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em] hover:text-white transition-colors"
           >

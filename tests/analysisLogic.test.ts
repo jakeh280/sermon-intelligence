@@ -5,6 +5,7 @@ import {
   CLIP_CEIL_SEC,
   CLIP_FLOOR_SEC,
   formatDurationSec,
+  parseClipBounds,
   snapClipSec,
 } from "../lib/clipRange.ts";
 import { parseHistory } from "../lib/history.ts";
@@ -26,6 +27,20 @@ test("durations use compact readable labels", () => {
   assert.equal(formatDurationSec(45), "45s");
   assert.equal(formatDurationSec(60), "1m");
   assert.equal(formatDurationSec(125), "2m 5s");
+});
+
+test("API clip bounds use the shared slider rules", () => {
+  assert.deepEqual(
+    parseClipBounds({ clipMinSec: 18, clipMaxSec: 123 }),
+    { min: 20, max: 125 },
+  );
+  assert.deepEqual(
+    parseClipBounds({ clipMinSec: -10, clipMaxSec: 900 }),
+    { min: CLIP_FLOOR_SEC, max: CLIP_CEIL_SEC },
+  );
+  assert.equal(parseClipBounds({ clipMinSec: 120, clipMaxSec: 15 }), null);
+  assert.equal(parseClipBounds({ clipMinSec: "15", clipMaxSec: 120 }), null);
+  assert.equal(parseClipBounds(null), null);
 });
 
 test("markdown sections preserve a preamble and headings", () => {

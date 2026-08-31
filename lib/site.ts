@@ -13,7 +13,7 @@ export const SITE_URL = "https://www.sermonintelligence.com";
 export const SITE_NAME = "Sermon Intelligence";
 
 export const SITE_DESCRIPTION =
-  "Break down your sermons into details you can use. Upload a transcript and get summaries, key points, and shareable takeaways. Free.";
+  "Turn a sermon transcript into YouTube titles, a publish ready description, chapter markers, and social clip suggestions. Free for church media teams.";
 
 /**
  * WebApplication rather than WebSite: this is a tool, not a content site, and

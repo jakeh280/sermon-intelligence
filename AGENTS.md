@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Sermon Intelligence is a free web app for church media directors that analyzes sermon transcripts and generates YouTube metadata (titles, descriptions, chapter markers) and social media clip suggestions.
 
-- **Framework:** Next.js 16.3.0 + React 19 + TypeScript
+- **Framework:** Next.js 16.3.2 + React 19 + TypeScript
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
 - **AI SDK:** Vercel AI SDK (`ai` ^7.x) with `@ai-sdk/google` provider
@@ -271,7 +271,8 @@ verified output, not a live generation.
 - **Platform:** Vercel free hobby tier, current Vercel Node.js runtime
 - **`maxDuration = 60`** seconds for streaming responses
 - **Env var:** `GOOGLE_GENERATIVE_AI_API_KEY`
-- **Analytics:** Vercel Analytics (`@vercel/analytics`, free tier), wired via `<Analytics />` in `app/layout.tsx`. Google Analytics and Microsoft Clarity were both removed (July 2026).
+- **Analytics:** Vercel Analytics (`@vercel/analytics`, free tier), wired via `<Analytics />` in `app/layout.tsx`, plus Cloudflare Web Analytics injected by the Cloudflare zone. Both are disclosed in the Privacy panel. Google Analytics and Microsoft Clarity were both removed (July 2026).
+- **Gemini data terms:** The API project has active billing. The Privacy panel links to the Gemini API terms and reflects the paid service rules rather than the unpaid service model improvement language.
 
 ```bash
 npm run dev      # Local development (port 3000)
@@ -293,6 +294,8 @@ sermon-intelligence/
 │   ├── page.tsx              # Main UI, orchestration, and bento cards
 │   ├── layout.tsx            # RootLayout, metadata
 │   ├── globals.css           # Tailwind imports, CSS variables
+│   ├── error.tsx             # Friendly route error recovery
+│   ├── opengraph-image.tsx   # Generated social sharing image
 │   └── api/
 │       └── chat/
 │           └── route.ts      # Server endpoint, Gemini API streaming
@@ -304,6 +307,7 @@ sermon-intelligence/
 │   ├── outputParsing.ts      # Pure Markdown and clip output parsing
 │   ├── requestErrors.ts      # Stall timeout and user facing failure messages
 │   ├── rateLimit.ts          # route level burst limiter and client key
+│   ├── rateLimitConfig.ts    # shared rate limit window and request count
 │   ├── site.ts               # canonical site metadata and structured data
 │   ├── systemPrompt.ts       # buildSystemPrompt(min, max) function
 │   ├── transcript.ts         # Premiere, SRT, and WebVTT normalization
@@ -317,7 +321,7 @@ sermon-intelligence/
 ├── public/                   # Static assets (SVGs, favicon)
 ├── proxy.ts                  # Rate limiting logic (not a Next.js middleware)
 ├── tsconfig.json
-├── next.config.ts            # Minimal/empty config
+├── next.config.ts            # Security response headers
 ├── tailwind.config.js
 ├── postcss.config.mjs
 ├── package.json
@@ -404,5 +408,5 @@ If app loads then returns to homepage with no errors:
 
 ---
 
-**Last Updated:** 2026-08-11
+**Last Updated:** 2026-08-30
 **Status:** Active maintenance, occasional feature additions

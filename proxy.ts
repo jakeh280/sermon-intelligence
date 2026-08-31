@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  RATE_LIMIT_MAX_REQUESTS,
+  RATE_LIMIT_WINDOW_MS,
+} from "@/lib/rateLimitConfig";
 
 const ipStore = new Map<string, { count: number; windowStart: number }>();
 
-const WINDOW_MS = 60 * 60 * 1000; // 1 hour
 // Raised from 5 on 2026-07-19. Gemini spend was $0.13 across 90 days against a
 // $5 monthly cap, so the old limit was throttling real users to protect against
 // a cost that never materialized.
-const MAX_REQUESTS = 20;
 
 function getIp(req: NextRequest): string {
   return (
@@ -19,7 +21,7 @@ function getIp(req: NextRequest): string {
 function evictStale() {
   const now = Date.now();
   for (const [ip, entry] of ipStore) {
-    if (now - entry.windowStart > WINDOW_MS) ipStore.delete(ip);
+    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) ipStore.delete(ip);
   }
 }
 
@@ -34,13 +36,13 @@ export function proxy(req: NextRequest) {
   const now = Date.now();
   const entry = ipStore.get(ip);
 
-  if (!entry || now - entry.windowStart > WINDOW_MS) {
+  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     ipStore.set(ip, { count: 1, windowStart: now });
     return NextResponse.next();
   }
 
-  if (entry.count >= MAX_REQUESTS) {
-    const resetInMs = WINDOW_MS - (now - entry.windowStart);
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    const resetInMs = RATE_LIMIT_WINDOW_MS - (now - entry.windowStart);
     const resetInMin = Math.ceil(resetInMs / 60000);
     return new NextResponse(
       JSON.stringify({

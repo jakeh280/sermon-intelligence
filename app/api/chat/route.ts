@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
+import { parseClipBounds } from "@/lib/clipRange";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 import { isRateLimited, clientKey } from "@/lib/rateLimit";
 import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
@@ -15,29 +16,6 @@ const google = createGoogleGenerativeAI({
 
 // Vercel Serverless (Node.js) runtime
 export const maxDuration = 60;
-
-const CLIP_MIN_ALLOWED = 15;
-const CLIP_MAX_ALLOWED = 600;
-const CLIP_STEP = 5;
-
-function snapClipSec(n: number): number {
-  const r = Math.round(n / CLIP_STEP) * CLIP_STEP;
-  return Math.min(CLIP_MAX_ALLOWED, Math.max(CLIP_MIN_ALLOWED, r));
-}
-
-function parseClipBounds(body: unknown): { min: number; max: number } | null {
-  if (typeof body !== "object" || body === null) return null;
-  const o = body as Record<string, unknown>;
-  const minRaw = o.clipMinSec;
-  const maxRaw = o.clipMaxSec;
-  if (typeof minRaw !== "number" || typeof maxRaw !== "number") return null;
-  if (!Number.isFinite(minRaw) || !Number.isFinite(maxRaw)) return null;
-  const min = snapClipSec(minRaw);
-  const max = snapClipSec(maxRaw);
-  if (min < CLIP_MIN_ALLOWED || max > CLIP_MAX_ALLOWED) return null;
-  if (min > max) return null;
-  return { min, max };
-}
 
 export async function POST(req: Request) {
   if (isRateLimited(clientKey(req))) {
