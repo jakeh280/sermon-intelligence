@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
       day: friday
       time: "09:00"
       timezone: America/New_York
@@ -27,7 +27,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
       day: friday
       time: "09:00"
       timezone: America/New_York

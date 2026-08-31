@@ -23,9 +23,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Anything merged here lands on the default branch, and lint plus build is the
+      # entire gate. That catches a broken build; it does not catch a major version
+      # that builds clean and changes behavior. So majors stop here for a human.
+      #
+      # Dependabot writes an `updated-dependencies:` trailer into the commit message
+      # with an `update-type:` line per dependency, which is how this tells a major
+      # from a patch even on a grouped PR covering several packages.
       - name: Merge pull request
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           REPO: ${{ github.repository }}
-        run: gh pr merge "$PR_NUMBER" --repo "$REPO" --squash --delete-branch
+        run: |
+          set -euo pipefail
+          messages=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+            --json commits --jq '.commits[].messageBody')
+
+          if grep -q 'update-type: version-update:semver-major' <<<"$messages"; then
+            echo "This PR contains a major version bump. Not auto-merging."
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              'Held for manual review: this PR contains a major version bump.'
+            exit 0
+          fi
+
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --squash --delete-branch
