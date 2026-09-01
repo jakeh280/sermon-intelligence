@@ -21,6 +21,9 @@ jobs:
       github.event.workflow_run.pull_requests[0] &&
       github.event.workflow_run.pull_requests[0].number
     runs-on: ubuntu-latest
+    # Without this a hung job inherits GitHub's six hour default. Every run of
+    # this job to date finishes in under a minute, so 5 means stuck, not slow.
+    timeout-minutes: 5
 
     steps:
       # Anything merged here lands on the default branch, and lint plus build is the
