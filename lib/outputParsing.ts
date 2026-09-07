@@ -15,6 +15,13 @@ const FENCE_DELIMITER = /^(?:```|~~~)/;
  * string-based splitter (it works on raw section boundaries, not a real
  * markdown AST) doesn't model correctly either way - narrower than this
  * audit finding, and not worth solving as a side effect of it.
+ *
+ * An unpaired fence delimiter (the model opens one and never closes it)
+ * masks nothing at all rather than masking everything from there to the end
+ * of the response: before this masking existed, a dangling ``` left every
+ * later heading intact, so treating it as "still in a fence forever" would
+ * make this hardening actively worse than the unhardened behavior for that
+ * drift case, not just ineffective against it.
  */
 function maskFencedLines(markdown: string): {
   masked: string;
@@ -33,6 +40,11 @@ function maskFencedLines(markdown: string): {
     placeholders.set(placeholder, line);
     return placeholder;
   });
+
+  if (inFence) {
+    // The fence never closed, so nothing above should have been masked.
+    return { masked: markdown, restore: (text: string) => text };
+  }
 
   return {
     masked: maskedLines.join("\n"),

@@ -263,6 +263,20 @@ test("a heading-shaped line inside a fenced code block does not split the sectio
   );
 });
 
+test("an unpaired fence delimiter masks nothing rather than swallowing the rest of the response", () => {
+  // If the fence never closes, treating everything after it as "inside the
+  // fence" would mask every real heading that follows - turning this
+  // hardening into something that shreds a well formed response worse than
+  // leaving an unclosed fence unmasked ever did.
+  const sections = parseBentoSections(
+    "### Titles\nSynthetic title\n\n### Description\n```\nan unpaired fence starts here and never closes\n\n### Chapters\n00:00 Start\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Titles", "Description", "Chapters", "Clips"],
+  );
+});
+
 test("a stray heading before any canonical section is kept as its own card", () => {
   // No prior section to fold into, so this is left alone rather than dropped.
   const sections = parseBentoSections("### 00:00 Introduction\nSynthetic body.");

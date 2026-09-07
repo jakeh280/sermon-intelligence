@@ -15,8 +15,13 @@ export const MAX_TRANSCRIPT_BYTES = 5 * 1024 * 1024;
  * escaped control characters) plus a couple of small numeric fields. See
  * `lib/boundedBody.ts` for why this is enforced during the read rather than
  * with a check on `req.json()`'s already-parsed result.
+ *
+ * Deliberately kept below Next.js's own ~10MB body-size cap (it truncates
+ * and warns rather than rejecting - see the route's comment), not equal to
+ * or above it: this check has to actually run before that limit silently
+ * truncates the body out from under it.
  */
-export const MAX_REQUEST_BODY_BYTES = MAX_TRANSCRIPT_BYTES * 2;
+export const MAX_REQUEST_BODY_BYTES = MAX_TRANSCRIPT_BYTES + 1024 * 1024;
 
 export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 
