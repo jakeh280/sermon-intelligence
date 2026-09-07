@@ -105,6 +105,75 @@ Duration mattered less than the moment`;
   assert.equal(clip?.Duration, undefined);
 });
 
+test("a field label alias inside the quoted transcript does not truncate it", () => {
+  // Reproduces AUDIT.md F8: "Why:" appears mid quote, one field early (before
+  // Description), via the loose "Why" alias rather than the literal "Why it
+  // works" label. It must stay part of the Transcript instead of silently
+  // starting a new field and losing everything after it.
+  const body = `Option 1
+Title: Original title
+Transcript: Opening words
+Why: because we need grace
+Closing words
+Description: Context
+Why it works: Complete thought`;
+
+  const clip = parseClipOptions(body).clips[0];
+  assert.equal(
+    clip?.Transcript,
+    "Opening words Why: because we need grace Closing words",
+  );
+  assert.equal(clip?.Description, "Context");
+  assert.equal(clip?.["Why it works"], "Complete thought");
+});
+
+test("a field label alias that would move backward stays with the quote instead", () => {
+  const body = `Option 1
+Transcript: He said now is the time
+Time: to move forward
+Description: Context
+Why it works: Reason`;
+
+  const clip = parseClipOptions(body).clips[0];
+  assert.equal(clip?.Transcript, "He said now is the time Time: to move forward");
+  assert.equal(clip?.Description, "Context");
+});
+
+test("the exact next-field label always transitions, even mid-quote", () => {
+  // A quote that happens to contain the *literal*, correctly-positioned next
+  // label is indistinguishable from a real field boundary, so this is not a
+  // case the parser can rescue - the fix only targets out-of-order aliases.
+  const body = `Option 1
+Transcript: First part
+Description: Second part`;
+
+  const clip = parseClipOptions(body).clips[0];
+  assert.equal(clip?.Transcript, "First part");
+  assert.equal(clip?.Description, "Second part");
+});
+
+test("fields out of the prompt's order still all land, not just the first one", () => {
+  // The out-of-order guard above must not mistake a model that emits the six
+  // fields in a different order (still each exactly once) for a quote
+  // collision, which would wrongly swallow every field after the first
+  // reordered one into the field that was open at the time.
+  const body = `Option 1
+Title: X
+Timestamps: 00:00 - 00:10
+Duration: 10 seconds
+Transcript: Verbatim quote text
+Description: Some context
+Why it works: A reason`;
+
+  const clip = parseClipOptions(body).clips[0];
+  assert.equal(clip?.Title, "X");
+  assert.equal(clip?.Timestamps, "00:00 - 00:10");
+  assert.equal(clip?.Duration, "10 seconds");
+  assert.equal(clip?.Transcript, "Verbatim quote text");
+  assert.equal(clip?.Description, "Some context");
+  assert.equal(clip?.["Why it works"], "A reason");
+});
+
 test("option labels are cleaned of markdown for display", () => {
   const { clips } = parseClipOptions("**Option 2:**\nTitle: Synthetic title");
   assert.equal(clips[0]?.optionLabel, "Option 2");
@@ -177,6 +246,37 @@ test("a stray heading with its own body keeps that body on the merged line", () 
   );
 });
 
+test("a heading-shaped line inside a fenced code block does not split the section", () => {
+  // A quoted excerpt inside a fence coincidentally starting a line with
+  // "### " (or "## ") must stay part of the section it's fenced inside,
+  // not become a section boundary of its own.
+  const sections = parseBentoSections(
+    "### Chapters\n00:00 Start\n\n```\n### Not A Real Section\nJust quoted text inside a fence.\n```\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Chapters", "Clips"],
+  );
+  assert.match(
+    sections.find((section) => section.title === "Chapters")?.body ?? "",
+    /```\n### Not A Real Section\nJust quoted text inside a fence\.\n```/,
+  );
+});
+
+test("an unpaired fence delimiter masks nothing rather than swallowing the rest of the response", () => {
+  // If the fence never closes, treating everything after it as "inside the
+  // fence" would mask every real heading that follows - turning this
+  // hardening into something that shreds a well formed response worse than
+  // leaving an unclosed fence unmasked ever did.
+  const sections = parseBentoSections(
+    "### Titles\nSynthetic title\n\n### Description\n```\nan unpaired fence starts here and never closes\n\n### Chapters\n00:00 Start\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Titles", "Description", "Chapters", "Clips"],
+  );
+});
+
 test("a stray heading before any canonical section is kept as its own card", () => {
   // No prior section to fold into, so this is left alone rather than dropped.
   const sections = parseBentoSections("### 00:00 Introduction\nSynthetic body.");
@@ -197,4 +297,24 @@ test("heading-ified chapters are also merged through the h2 fallback path", () =
     sections.find((section) => section.title === "Chapters")?.body,
     "- 00:00 Introduction",
   );
+});
+
+test("a nested h3 inside h2 sections does not block the h2 fallback from recovering them", () => {
+  // Reproduces the shape from AUDIT.md F7: the model uses "## " for the four
+  // real sections but then heading-ifies a clip option as "### Option 1".
+  // The lone "###" heading used to count as "the response has headings",
+  // which stopped the "##" fallback from ever running and left everything
+  // before "### Option 1" as one undifferentiated Draft section.
+  const sections = parseBentoSections(
+    "## Titles\nSynthetic title\n\n## Description\nSynthetic description\n\n## Chapters\n00:00 Start\n\n## Clips\n### Option 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Titles", "Description", "Chapters", "Clips"],
+  );
+  const { clips } = parseClipOptions(
+    sections.find((section) => section.title === "Clips")?.body ?? "",
+  );
+  assert.equal(clips.length, 1);
+  assert.equal(clips[0]?.Title, "Synthetic");
 });

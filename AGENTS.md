@@ -47,8 +47,9 @@ const model = google("gemini-3.5-flash-lite"); // CORRECT
 Jake is evaluating OpenAI's `gpt-5.6-luna` as a possible alternative (2026-08-03).
 Launched 2026-07-09 at $1/$6 per 1M input/output tokens; cut 80% on 2026-07-30 to
 $0.20/$1.20 per 1M tokens. Still pricier per-token than `gemini-3.5-flash-lite`
-(~$0.10/$0.40 per 1M), but at this app's traffic (rate-limited to 5 req/IP/hour)
-the dollar difference is cents/month either way — cost is not the deciding factor.
+(~$0.10/$0.40 per 1M), but at this app's traffic (rate-limited per IP per hour,
+see `RATE_LIMIT_MAX_REQUESTS` in `lib/rateLimitConfig.ts`) the dollar difference
+is cents/month either way — cost is not the deciding factor.
 
 Switching would require adding an `@ai-sdk/openai` provider and reworking the
 model init in `app/api/chat/route.ts`. Before switching, run a real transcript
@@ -67,13 +68,13 @@ No decision made yet; revisit if/when explored further.
 Key behaviors:
 - Generates 3 YouTube title options: Human Tension, Theological Point, Biblical Context (5–8 words each)
 - Generates YouTube description (150–200 words)
-- Generates YouTube chapters (5–8 for short sermons, 8–12 for 60m+, format: `mm:ss Chapter Name`)
+- Generates YouTube chapters (capped at 6–9 regardless of sermon length, format: `mm:ss Chapter Name`, or `h:mm:ss Chapter Name` past the first hour)
 - Generates 3 social clips with: Timestamps, Duration, Title, Transcript, Description, Why it works
 - Bans filler phrases: "we explore", "join us", "we discover"
 - Writes in 1st-person plural ("we", "us") as the church
 - NO em-dashes or unnecessary dashes
 - Double line breaks between sections
-- Clip duration must fall strictly between `clipMinSec` and `clipMaxSec`
+- Clip duration must fall between `clipMinSec` and `clipMaxSec`, inclusive (equal min/max asks for that exact duration)
 
 `hasTimestamps` is `hasTimestampTags(text)` from `lib/transcript.ts`, computed
 in `app/api/chat/route.ts` from the normalized transcript. When false (no

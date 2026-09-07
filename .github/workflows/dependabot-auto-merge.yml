@@ -26,28 +26,93 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      # Anything merged here lands on the default branch, and lint plus build is the
-      # entire gate. That catches a broken build; it does not catch a major version
-      # that builds clean and changes behavior. So majors stop here for a human.
+      # The `if:` above only establishes that *some* CI run against *some*
+      # dependabot/* branch succeeded. Everything that actually matters for
+      # merge safety is checked here against live PR state, not the
+      # workflow_run event payload, because that payload is exactly what an
+      # attacker (or a stale/replayed run) controls least reliably:
       #
-      # Dependabot writes an `updated-dependencies:` trailer into the commit message
-      # with an `update-type:` line per dependency, which is how this tells a major
-      # from a patch even on a grouped PR covering several packages.
+      # - PR author must really be Dependabot, not a human who happened to
+      #   push to a branch starting with "dependabot/".
+      # - The PR head must live in this repository, not a fork (Dependabot
+      #   PRs never come from forks; a cross-repo PR here is not one of them).
+      # - The revision CI tested (github.event.workflow_run.head_sha) must
+      #   still be the PR's current head. Without this, an old successful run
+      #   completing after the PR was updated - or simply completing late -
+      #   would merge code that was never tested.
+      # - Update-type metadata must be positively present and recognized.
+      #   Dependabot always writes `update-type:` trailers; their total
+      #   absence is a sign this isn't a PR this workflow understands, not
+      #   permission to merge it anyway.
+      #
+      # This workflow never checks out or executes PR code: it only reads PR
+      # metadata over the API and, if everything checks out, asks GitHub to
+      # merge. `--match-head-commit` closes the last race (a push landing
+      # between the check above and the merge call itself) at the API level.
       - name: Merge pull request
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           REPO: ${{ github.repository }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          messages=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
-            --json commits --jq '.commits[].messageBody')
 
-          if grep -q 'update-type: version-update:semver-major' <<<"$messages"; then
-            echo "This PR contains a major version bump. Not auto-merging."
+          pr_json=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json \
+            author,baseRefName,headRefOid,isCrossRepository,commits)
+
+          author=$(jq -r '.author.login' <<<"$pr_json")
+          base_ref=$(jq -r '.baseRefName' <<<"$pr_json")
+          head_sha=$(jq -r '.headRefOid' <<<"$pr_json")
+          is_cross_repo=$(jq -r '.isCrossRepository' <<<"$pr_json")
+
+          if [[ "$author" != "dependabot[bot]" ]]; then
+            echo "PR #$PR_NUMBER author is '$author', not dependabot[bot]. Refusing to merge."
+            exit 0
+          fi
+
+          if [[ "$is_cross_repo" == "true" ]]; then
+            echo "PR #$PR_NUMBER head is not in this repository. Refusing to merge."
+            exit 0
+          fi
+
+          default_branch=$(gh repo view "$REPO" --json defaultBranchRef \
+            --jq '.defaultBranchRef.name')
+          if [[ "$base_ref" != "$default_branch" ]]; then
+            echo "PR #$PR_NUMBER targets '$base_ref', not the default branch '$default_branch'. Refusing to merge."
+            exit 0
+          fi
+
+          # Logged unconditionally, not just on mismatch: this is the one check
+          # here that can't be exercised before a real Dependabot PR runs
+          # through it. If workflow_run.head_sha ever turns out to name a
+          # merge commit rather than the PR branch head, this comparison would
+          # silently never match and auto-merge would silently never fire
+          # again - fail closed, so safe, but this line is what would make
+          # that visible in the run log instead of a quiet mystery.
+          echo "CI tested revision: $TESTED_SHA"
+          echo "PR #$PR_NUMBER current head: $head_sha"
+          if [[ "$head_sha" != "$TESTED_SHA" ]]; then
+            echo "Head has moved since CI ran. Refusing to merge a revision that was never tested."
+            exit 0
+          fi
+
+          messages=$(jq -r '.commits[].messageBody' <<<"$pr_json")
+          update_types=$(grep -o 'update-type: version-update:semver-[a-z]*' <<<"$messages" | sort -u || true)
+
+          if [[ -z "$update_types" ]]; then
+            echo "PR #$PR_NUMBER has no recognized Dependabot update-type metadata. Refusing to merge without positive identification."
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+              'Held for manual review: could not positively identify this as a recognized Dependabot update.'
+            exit 0
+          fi
+
+          if grep -q 'semver-major' <<<"$update_types"; then
+            echo "PR #$PR_NUMBER contains a major version bump. Not auto-merging."
             gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
               'Held for manual review: this PR contains a major version bump.'
             exit 0
           fi
 
-          gh pr merge "$PR_NUMBER" --repo "$REPO" --squash --delete-branch
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --squash --delete-branch \
+            --match-head-commit "$TESTED_SHA"

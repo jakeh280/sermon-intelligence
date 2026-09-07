@@ -8,6 +8,21 @@ export const MAX_TRANSCRIPT_CHARACTERS = 150_000;
  */
 export const MAX_TRANSCRIPT_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Bounds the raw request body `app/api/chat/route.ts` will read, before it's
+ * even parsed as JSON. Needs headroom over MAX_TRANSCRIPT_BYTES rather than
+ * matching it: the body is that text JSON-wrapped (a `text` key, quoting,
+ * escaped control characters) plus a couple of small numeric fields. See
+ * `lib/boundedBody.ts` for why this is enforced during the read rather than
+ * with a check on `req.json()`'s already-parsed result.
+ *
+ * Deliberately kept below Next.js's own ~10MB body-size cap (it truncates
+ * and warns rather than rejecting - see the route's comment), not equal to
+ * or above it: this check has to actually run before that limit silently
+ * truncates the body out from under it.
+ */
+export const MAX_REQUEST_BODY_BYTES = MAX_TRANSCRIPT_BYTES + 1024 * 1024;
+
 export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 
 export const ACCEPTED_EXTENSIONS_LABEL = ".txt, .srt, or .vtt";

@@ -10,6 +10,15 @@ Built by [Overflow Creative](https://overflowcreative.net) for churches — past
 
 Next.js, TypeScript, Tailwind, and the Vercel AI SDK on Gemini.
 
+## Environment variables
+
+Set `GOOGLE_GENERATIVE_AI_API_KEY` (a Google Generative AI / Gemini API key) in
+`.env.local` before running the app — the API route needs it to reach Gemini.
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=your-key-here
+```
+
 ## Running locally
 
 ```bash

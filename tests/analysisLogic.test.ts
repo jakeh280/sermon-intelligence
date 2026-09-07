@@ -43,6 +43,24 @@ test("API clip bounds use the shared slider rules", () => {
   assert.equal(parseClipBounds(null), null);
 });
 
+// AUDIT.md F6: equal min/max is a valid slider position (an exact duration
+// target), not an error - parseClipBounds already allowed it (min <= max);
+// this pins that down at both the extremes and an interior value.
+test("equal min and max bounds are accepted as an exact duration target", () => {
+  assert.deepEqual(
+    parseClipBounds({ clipMinSec: 60, clipMaxSec: 60 }),
+    { min: 60, max: 60 },
+  );
+  assert.deepEqual(
+    parseClipBounds({ clipMinSec: CLIP_FLOOR_SEC, clipMaxSec: CLIP_FLOOR_SEC }),
+    { min: CLIP_FLOOR_SEC, max: CLIP_FLOOR_SEC },
+  );
+  assert.deepEqual(
+    parseClipBounds({ clipMinSec: CLIP_CEIL_SEC, clipMaxSec: CLIP_CEIL_SEC }),
+    { min: CLIP_CEIL_SEC, max: CLIP_CEIL_SEC },
+  );
+});
+
 test("markdown sections preserve a preamble and headings", () => {
   const sections = parseBentoSections(
     "\uFEFFUseful opening\n\n### Titles\nOne\n\n### Description\nTwo",

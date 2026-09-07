@@ -1,10 +1,69 @@
 export type BentoSection = { title: string; body: string };
 
+const FENCE_DELIMITER = /^(?:```|~~~)/;
+
+/**
+ * Replaces every line strictly inside a fenced code block (the delimiter
+ * lines themselves are never heading shaped, so they're left alone) with an
+ * opaque placeholder that can't match a heading pattern - so a "### "/"## "
+ * shaped line quoted inside a fence can't be mistaken for a real section
+ * boundary. The prompt never asks the model to fence anything, so this is
+ * about robustness against drift rather than a case seen in practice.
+ *
+ * Not extended to blockquotes: a `> ### heading` is, per CommonMark, a
+ * heading *inside* the blockquote rather than a top-level one, which this
+ * string-based splitter (it works on raw section boundaries, not a real
+ * markdown AST) doesn't model correctly either way - narrower than this
+ * audit finding, and not worth solving as a side effect of it.
+ *
+ * An unpaired fence delimiter (the model opens one and never closes it)
+ * masks nothing at all rather than masking everything from there to the end
+ * of the response: before this masking existed, a dangling ``` left every
+ * later heading intact, so treating it as "still in a fence forever" would
+ * make this hardening actively worse than the unhardened behavior for that
+ * drift case, not just ineffective against it.
+ */
+function maskFencedLines(markdown: string): {
+  masked: string;
+  restore: (text: string) => string;
+} {
+  let inFence = false;
+  const placeholders = new Map<string, string>();
+
+  const maskedLines = markdown.split("\n").map((line, index) => {
+    const isDelimiter = FENCE_DELIMITER.test(line);
+    const wasInFence = inFence;
+    if (isDelimiter) inFence = !inFence;
+    if (!wasInFence || isDelimiter) return line;
+
+    const placeholder = `FENCE_LINE_${index}`;
+    placeholders.set(placeholder, line);
+    return placeholder;
+  });
+
+  if (inFence) {
+    // The fence never closed, so nothing above should have been masked.
+    return { masked: markdown, restore: (text: string) => text };
+  }
+
+  return {
+    masked: maskedLines.join("\n"),
+    restore: (text: string) => {
+      let result = text;
+      for (const [placeholder, original] of placeholders) {
+        result = result.split(placeholder).join(original);
+      }
+      return result;
+    },
+  };
+}
+
 function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
-  const parts = markdown.split(heading);
+  const { masked, restore } = maskFencedLines(markdown);
+  const parts = masked.split(heading);
   const sections: BentoSection[] = [];
 
-  const preamble = parts[0]?.trim() ?? "";
+  const preamble = restore(parts[0]?.trim() ?? "");
   if (preamble) {
     sections.push({ title: DRAFT_SECTION_TITLE, body: preamble });
   }
@@ -12,8 +71,12 @@ function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
   for (let index = 1; index < parts.length; index += 1) {
     const chunk = parts[index] ?? "";
     const newline = chunk.indexOf("\n");
-    const title = newline === -1 ? chunk.trim() : chunk.slice(0, newline).trim();
-    const body = newline === -1 ? "" : chunk.slice(newline + 1).trimEnd();
+    const title = restore(
+      newline === -1 ? chunk.trim() : chunk.slice(0, newline).trim(),
+    );
+    const body = restore(
+      newline === -1 ? "" : chunk.slice(newline + 1).trimEnd(),
+    );
     if (title || body) {
       sections.push({ title: title || "Section", body });
     }
@@ -68,19 +131,48 @@ function mergeStraySections(sections: BentoSection[]): BentoSection[] {
   return merged;
 }
 
+/** How many of the four sections the prompt actually defines this split recovered. */
+function countCanonicalSections(sections: BentoSection[]): number {
+  return sections.filter(
+    (section) =>
+      isTitlesSectionTitle(section.title) ||
+      isDescriptionSectionTitle(section.title) ||
+      isChaptersSectionTitle(section.title) ||
+      isClipsSectionTitle(section.title),
+  ).length;
+}
+
 export function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
-  const sections = splitOnHeading(trimmed, /^###\s+/m);
-  if (hasHeadedSection(sections)) return mergeStraySections(sections);
+  const strict = splitOnHeading(trimmed, /^###\s+/m);
 
   // The prompt asks for "### " headings, but a model that answers with "## "
   // instead would otherwise collapse into one untitled card. Only "##" is worth
   // retrying: "####" is plausible as a subheading inside a well formed section,
   // so falling back to it could shred a response rather than rescue one.
   const relaxed = splitOnHeading(trimmed, /^##\s+/m);
-  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : sections;
+
+  // The mere presence of a "###" heading isn't proof the response is well
+  // formed at that level: a model that writes "## Titles" ... "## Clips" and
+  // then nests "### Option 1" inside Clips has one "###" heading, which used
+  // to be enough to block the "##" fallback from ever running and firing on
+  // the four real sections. Compare how many *canonical* sections each split
+  // actually recovers and prefer whichever level does better, so a stray
+  // deeper heading can't defeat the shallower one that would have worked.
+  if (countCanonicalSections(relaxed) > countCanonicalSections(strict)) {
+    return mergeStraySections(relaxed);
+  }
+
+  if (hasHeadedSection(strict)) return mergeStraySections(strict);
+  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : strict;
 }
 
+// Order matters here beyond display: it is also the canonical field sequence
+// the prompt's "Use this exact format" block asks for (lib/systemPrompt.ts),
+// and parseClipFieldLines() below relies on that sequence to decide whether a
+// line that looks like a field label is a real field transition or just
+// quoted text. Reordering this array changes both what renders first and
+// what parseClipFieldLines() will accept as a forward transition.
 export const CLIP_FIELD_LABELS = [
   "Timestamps",
   "Duration",
@@ -132,6 +224,14 @@ const CLIP_FIELD_PATTERNS = CLIP_FIELD_LABELS.map(
   (key) => [key, fieldLabelPattern(CLIP_FIELD_ALIASES[key])] as const,
 );
 
+// Matches only a field's own literal label (no aliases), used to tell a
+// deliberate field transition from a coincidental alias collision below.
+const CANONICAL_FIELD_PATTERNS = CLIP_FIELD_LABELS.map(
+  (key) => [key, fieldLabelPattern([key])] as const,
+);
+
+const FIELD_ORDER = new Map(CLIP_FIELD_LABELS.map((key, index) => [key, index]));
+
 /**
  * Matches a line that is nothing but an option header. Bold markers, a heading
  * prefix, a list bullet, and trailing punctuation are all tolerated, but the
@@ -173,6 +273,37 @@ export function parseClipFieldLines(
         matchedKey = key;
         valuePart = match[1]?.trim() ?? "";
         break;
+      }
+    }
+
+    // A field label can also just be quoted: a sermon transcript that
+    // literally says "time to reap" or a stray "Why:" mid quote matches one
+    // of the patterns above without being a real new field. Once a field is
+    // already open, only accept the match as a genuine transition when:
+    //  - it moves to the very next field in the prompt's order, or
+    //  - it skips further ahead, but only via that field's own exact label
+    //    rather than a looser alias (an alias is the ambiguous case; the
+    //    literal label is a much stronger signal a field really started), or
+    //  - it moves backward (or restates the current field) to a field that
+    //    hasn't been filled yet, and again only via the exact label. A model
+    //    that emits fields out of the prompt's order still writes each one
+    //    exactly once, so "already filled" is what tells that apart from a
+    //    quote that happens to repeat an earlier field's exact label.
+    if (matchedKey && current) {
+      const currentIndex = FIELD_ORDER.get(current) ?? -1;
+      const matchedIndex = FIELD_ORDER.get(matchedKey) ?? -1;
+      const isNextField = matchedIndex === currentIndex + 1;
+      const isCanonicalLabel = CANONICAL_FIELD_PATTERNS.some(
+        ([key, pattern]) => key === matchedKey && pattern.test(line),
+      );
+      const isUnfilledReorderedField =
+        isCanonicalLabel && !output[matchedKey];
+      const accepted =
+        isNextField ||
+        (matchedIndex > currentIndex && isCanonicalLabel) ||
+        (matchedIndex <= currentIndex && isUnfilledReorderedField);
+      if (!accepted) {
+        matchedKey = null;
       }
     }
 
