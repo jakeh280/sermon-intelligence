@@ -147,9 +147,20 @@ there so format changes can be tested without rendering the page.
 
 Parsing is deliberately tolerant of formatting the model drifts into: option
 headers behind bold, headings or bullets; field labels with the colon inside the
-bold; and a fallback to `## ` headings when a response contains no `### ` at
-all. An option header must still be the entire line, so quoted text cannot split
-a clip.
+bold; a fallback to `## ` headings; and heading-shaped lines inside a fenced
+code block, which are masked before splitting so a quoted excerpt can't be
+mistaken for a section boundary. An option header must still be the entire
+line, so quoted text cannot split a clip, and a clip field label only starts a
+new field when it's the next expected one (or that field's own exact label,
+not a looser alias) - so a stray "Why:"/"Time:"/"Title:" inside a verbatim
+quote can't truncate it.
+
+The `## ` fallback isn't "only when there's no `### ` anywhere": `## ` is
+preferred over `### ` whenever it actually recovers more of the four
+canonical sections, since a lone stray `### ` nested inside an otherwise
+well-formed `## ` response (e.g. a heading-ified clip option) would otherwise
+block the fallback from ever running. See `countCanonicalSections()` in
+`lib/outputParsing.ts`.
 
 The model sometimes over-applies "every section starts with `### `" and gives
 each individual chapter its own heading instead of listing them under one
@@ -160,8 +171,9 @@ Description, Chapters, Clips) is folded back into the section before it as a
 list line instead of kept as its own section.
 
 `lib/outputHealth.ts` inspects a **completed** response and reports empty,
-unstructured, or missing-section results. Never run it mid stream: a partial
-stream is legitimately missing sections.
+unstructured, missing-section, or incomplete-clips results (a Clips section
+whose heading and body arrived but didn't resolve to 3 fully-fielded clips).
+Never run it mid stream: a partial stream is legitimately missing sections.
 
 AI response is streamed as Markdown and parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`

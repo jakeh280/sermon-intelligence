@@ -101,14 +101,18 @@ function isGatewayTimeoutStatus(status: number) {
   return status === 504;
 }
 
-// Deliberately always AI_LIMIT_NOTICE, not whatever the server's 429 body
-// says: today that body (lib/rateLimit.ts) is just "Too many requests",
-// which is less useful than this constant's "try again in a few minutes"
-// framing. If the rate limiter starts returning something more specific
-// (e.g. an actual reset time), thread it through here then - not before,
-// since doing it speculatively would trade a good message for a worse one.
-function aiLimitError(): Error & { isAiLimit: true } {
-  const err = new Error(AI_LIMIT_NOTICE) as Error & { isAiLimit: true };
+// `detail` carries the server's actual 429 body. There are two independent
+// rate limiters in front of this route (proxy.ts, which runs first and
+// already computes a real "try again in N minutes" from its own window, and
+// the in-route lib/rateLimit.ts check, which only ever says the generic
+// "Too many requests"), so which message arrives depends on which one
+// tripped - the server's message is worth showing when there is one, with
+// AI_LIMIT_NOTICE only as the fallback for the generic case or a body that
+// didn't parse.
+function aiLimitError(detail?: string): Error & { isAiLimit: true } {
+  const err = new Error(detail || AI_LIMIT_NOTICE) as Error & {
+    isAiLimit: true;
+  };
   err.isAiLimit = true;
   return err;
 }
@@ -1024,18 +1028,25 @@ export default function Home() {
           signal: controller.signal,
         });
         if (!res.ok) {
-          if (isAiLimitHttpStatus(res.status)) {
-            throw aiLimitError();
-          }
           if (isGatewayTimeoutStatus(res.status)) {
             throw new Error(GATEWAY_TIMEOUT_MESSAGE);
           }
-          let detail = res.statusText;
+
+          // Only a message that actually came from the parsed body counts as
+          // "the server's message" below - res.statusText is just the
+          // generic HTTP reason phrase (e.g. "Too Many Requests"), and
+          // showing that in place of AI_LIMIT_NOTICE on a body-parse failure
+          // would be a worse fallback, not a better one.
+          let bodyMessage: string | undefined;
           try {
             const err = (await res.json()) as { error?: string };
-            if (err.error) detail = err.error;
+            if (err.error) bodyMessage = err.error;
           } catch { /* ignore */ }
-          throw new Error(detail || "Request failed");
+
+          if (isAiLimitHttpStatus(res.status)) {
+            throw aiLimitError(bodyMessage);
+          }
+          throw new Error(bodyMessage || res.statusText || "Request failed");
         }
 
         const reader = res.body?.getReader();
@@ -1129,7 +1140,7 @@ export default function Home() {
       } catch (e) {
         if (!isCurrent()) return;
         if (isAiLimitError(e)) {
-          setLimitNotice(AI_LIMIT_NOTICE);
+          setLimitNotice(e.message);
           setErrorMessage(null);
           setStatus("idle");
           return;
