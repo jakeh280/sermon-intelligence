@@ -891,6 +891,11 @@ export default function Home() {
   // discarded whatever the server actually said (see aiLimitError() above).
   const [limitNotice, setLimitNotice] = useState<string | null>(null);
   const [outputIssues, setOutputIssues] = useState<OutputIssue[]>([]);
+  // writeHistory can end up not persisting this generation at all (storage
+  // already full, private browsing) - it degrades gracefully rather than
+  // throwing, but that silence would otherwise look identical to a save
+  // that quietly worked. This flag is what tells the two apart on screen.
+  const [historySaveFailed, setHistorySaveFailed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>(() =>
@@ -911,7 +916,15 @@ export default function Home() {
       clipMinSec: min,
       clipMaxSec: max,
     };
-    setHistory((prev) => writeHistory(historyStorage(), [newItem, ...prev]));
+    setHistory((prev) => {
+      const result = writeHistory(historyStorage(), [newItem, ...prev]);
+      // If this generation didn't make it in, the returned list's newest
+      // entry isn't newItem - either the write failed at every size down to
+      // one item (writeHistory then hands back whatever was already
+      // persisted, unchanged), or it's a plain read failure returning [].
+      setHistorySaveFailed(result[0]?.id !== newItem.id);
+      return result;
+    });
   }, []);
 
   const deleteHistoryItem = (id: string) => {
@@ -940,6 +953,7 @@ export default function Home() {
     setProcessingLabel(item.label);
     setShowHistory(false);
     setIsDemo(false);
+    setHistorySaveFailed(false);
 
     // Entries saved before empty responses were rejected can still be blank, and
     // a blank one renders no cards at all. Say so rather than showing an empty page.
@@ -1076,6 +1090,7 @@ export default function Home() {
       setErrorMessage(null);
       setLimitNotice(null);
       setOutputIssues([]);
+      setHistorySaveFailed(false);
       setStatus("loading");
       setIsDemo(false);
 
@@ -1236,6 +1251,7 @@ export default function Home() {
     setErrorMessage(null);
     setLimitNotice(null);
     setOutputIssues([]);
+    setHistorySaveFailed(false);
     setStatus("idle");
     setCopied(false);
     setIsDemo(false);
@@ -1261,6 +1277,7 @@ export default function Home() {
     setErrorMessage(null);
     setLimitNotice(null);
     setOutputIssues([]);
+    setHistorySaveFailed(false);
     setStatus("idle");
     setCopied(false);
     setIsDemo(true);
@@ -1691,6 +1708,20 @@ export default function Home() {
                       {issue.message}
                     </p>
                   ))}
+                </div>
+              )}
+
+              {!streaming && !isDemo && historySaveFailed && (
+                <div
+                  className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-6 py-4"
+                  role="status"
+                >
+                  <p className="flex items-center justify-center gap-2 text-center text-sm font-bold text-amber-100/90">
+                    <TriangleAlert className="size-4 shrink-0" />
+                    This result could not be saved to History. Your
+                    browser&apos;s local storage may be full or unavailable;
+                    copy it below before leaving this page.
+                  </p>
                 </div>
               )}
 
