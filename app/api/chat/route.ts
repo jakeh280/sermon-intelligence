@@ -95,6 +95,14 @@ export async function POST(req: Request) {
           content: `Transcript content:\n\n${text}`,
         },
       ],
+      // Without this, a client disconnect (a reset, a stall timeout, a closed
+      // tab) stops the client from reading the response but leaves this
+      // function generating - and billing - against Gemini to completion
+      // regardless. req.signal fires when the underlying connection closes;
+      // the AI SDK and @ai-sdk/google both forward abortSignal into the
+      // actual fetch() call to Gemini, so this genuinely cancels the upstream
+      // request rather than just detaching from it.
+      abortSignal: req.signal,
     });
 
     return result.toTextStreamResponse();
