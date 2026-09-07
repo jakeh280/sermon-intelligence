@@ -1,10 +1,12 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
+import { readBoundedBody } from "@/lib/boundedBody";
 import { parseClipBounds } from "@/lib/clipRange";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
 import { isRateLimited, clientKey } from "@/lib/rateLimit";
 import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
 import {
+  MAX_REQUEST_BODY_BYTES,
   MAX_TRANSCRIPT_CHARACTERS,
   TOO_LONG_MESSAGE,
 } from "@/lib/transcriptInput";
@@ -25,9 +27,26 @@ export async function POST(req: Request) {
     );
   }
 
+  // `await req.json()` would fully buffer, decode, and parse the entire body
+  // before any size check could run, so a request large enough to matter
+  // pays that full cost regardless of what happens next. This bounds the
+  // read itself, refusing as soon as either the declared Content-Length or
+  // the actual bytes read cross the cap.
+  const bounded = await readBoundedBody(
+    req.body,
+    req.headers.get("content-length"),
+    MAX_REQUEST_BODY_BYTES,
+  );
+  if (!bounded.ok) {
+    return new Response(JSON.stringify({ error: TOO_LONG_MESSAGE }), {
+      status: 413,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    body = JSON.parse(bounded.text);
   } catch {
     return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
       status: 400,
