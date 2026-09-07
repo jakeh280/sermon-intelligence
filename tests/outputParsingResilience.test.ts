@@ -246,6 +246,23 @@ test("a stray heading with its own body keeps that body on the merged line", () 
   );
 });
 
+test("a heading-shaped line inside a fenced code block does not split the section", () => {
+  // A quoted excerpt inside a fence coincidentally starting a line with
+  // "### " (or "## ") must stay part of the section it's fenced inside,
+  // not become a section boundary of its own.
+  const sections = parseBentoSections(
+    "### Chapters\n00:00 Start\n\n```\n### Not A Real Section\nJust quoted text inside a fence.\n```\n\n### Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Chapters", "Clips"],
+  );
+  assert.match(
+    sections.find((section) => section.title === "Chapters")?.body ?? "",
+    /```\n### Not A Real Section\nJust quoted text inside a fence\.\n```/,
+  );
+});
+
 test("a stray heading before any canonical section is kept as its own card", () => {
   // No prior section to fold into, so this is left alone rather than dropped.
   const sections = parseBentoSections("### 00:00 Introduction\nSynthetic body.");
