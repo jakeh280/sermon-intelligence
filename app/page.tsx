@@ -878,6 +878,13 @@ export default function Home() {
   const [processingLabel, setProcessingLabel] = useState("");
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  // A plain "latest value" ref, read from inside async callbacks (a
+  // FileReader's onload/onerror) that closed over status when they were
+  // created and would otherwise act on a status that's since moved on.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Holds the message to show, not just whether to show one: a 504 and a 429
   // both used to collapse into the same hardcoded AI_LIMIT_NOTICE text, which
@@ -1123,11 +1130,23 @@ export default function Home() {
     [saveToHistory, streamChatResponse],
   );
 
+  // Every call claims a new id; a read whose id no longer matches
+  // fileReadIdRef.current by the time it finishes came from a selection the
+  // user has since replaced (with another file, or with one that failed
+  // validation immediately), and must not resurrect stale state over
+  // whatever is current now. Without this, selecting file A and then
+  // quickly file B let whichever FileReader finished last win, regardless
+  // of which one the user actually meant to keep.
+  const fileReadIdRef = useRef(0);
+
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
       const list = Array.from(files);
       const file = list[0];
       if (!file) return;
+
+      const readId = (fileReadIdRef.current += 1);
+      const isCurrentRead = () => fileReadIdRef.current === readId;
 
       const fileProblem = describeFileProblem(file);
       if (fileProblem) {
@@ -1138,6 +1157,12 @@ export default function Home() {
 
       const reader = new FileReader();
       reader.onload = () => {
+        if (!isCurrentRead()) return;
+        // A generation already running takes priority over a slow file read
+        // that finishes after the user moved on to Generate: it must not
+        // flip status back to idle (or error) out from under it.
+        if (statusRef.current === "loading") return;
+
         // Read as bytes rather than text so a byte order mark can pick the
         // encoding. Windows transcript exports are still often UTF-16.
         const buffer =
@@ -1159,6 +1184,8 @@ export default function Home() {
         setStatus("idle");
       };
       reader.onerror = () => {
+        if (!isCurrentRead()) return;
+        if (statusRef.current === "loading") return;
         setStatus("error");
         setErrorMessage("Could not read that file.");
       };
