@@ -51,7 +51,10 @@ export function readHistory(storage: HistoryStorage | null): HistoryItem[] {
  * Persists as much history as the browser will accept and returns what actually
  * landed, so React state cannot drift from what a reload would show. A single
  * long sermon output can be large enough to exhaust the quota on its own, in
- * which case the oldest entries are dropped until the write succeeds.
+ * which case the oldest entries are dropped until the write succeeds. If
+ * nothing fits, even a single item, whatever was already persisted is left
+ * alone rather than cleared: a write that doesn't fit says nothing about
+ * whether the existing, already-written list is still good.
  */
 export function writeHistory(
   storage: HistoryStorage | null,
@@ -70,8 +73,13 @@ export function writeHistory(
     }
   }
 
-  clearStoredHistory(storage);
-  return [];
+  // Every attempt failed, down to a single item. That isn't evidence the
+  // list already on disk is bad - it's evidence *this* write doesn't fit
+  // (a quota already near full, or one huge new result on its own) - so
+  // leave storage untouched rather than clearing it. Read back what's still
+  // there instead of assuming it's still `items`: another tab, or a
+  // previous successful call, may have left something different.
+  return readHistory(storage);
 }
 
 export function clearStoredHistory(storage: HistoryStorage | null): void {

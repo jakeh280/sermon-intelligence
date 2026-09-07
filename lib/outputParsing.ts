@@ -1,5 +1,13 @@
 export type BentoSection = { title: string; body: string };
 
+// Deliberately not hardened against a "### " or "## " heading appearing inside
+// a fenced code block or a quoted excerpt of the source transcript: the
+// prompt never asks the model to fence anything, and the transcript itself
+// never reaches the rendered output verbatim except inside a clip's
+// "Transcript:" field, which is plain prose rather than a fenced block. If a
+// real response is ever seen shredding on a heading-shaped line inside quoted
+// text, mask fenced/quoted regions before splitting rather than working
+// around it ad hoc here.
 function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
   const parts = markdown.split(heading);
   const sections: BentoSection[] = [];
@@ -68,19 +76,48 @@ function mergeStraySections(sections: BentoSection[]): BentoSection[] {
   return merged;
 }
 
+/** How many of the four sections the prompt actually defines this split recovered. */
+function countCanonicalSections(sections: BentoSection[]): number {
+  return sections.filter(
+    (section) =>
+      isTitlesSectionTitle(section.title) ||
+      isDescriptionSectionTitle(section.title) ||
+      isChaptersSectionTitle(section.title) ||
+      isClipsSectionTitle(section.title),
+  ).length;
+}
+
 export function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
-  const sections = splitOnHeading(trimmed, /^###\s+/m);
-  if (hasHeadedSection(sections)) return mergeStraySections(sections);
+  const strict = splitOnHeading(trimmed, /^###\s+/m);
 
   // The prompt asks for "### " headings, but a model that answers with "## "
   // instead would otherwise collapse into one untitled card. Only "##" is worth
   // retrying: "####" is plausible as a subheading inside a well formed section,
   // so falling back to it could shred a response rather than rescue one.
   const relaxed = splitOnHeading(trimmed, /^##\s+/m);
-  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : sections;
+
+  // The mere presence of a "###" heading isn't proof the response is well
+  // formed at that level: a model that writes "## Titles" ... "## Clips" and
+  // then nests "### Option 1" inside Clips has one "###" heading, which used
+  // to be enough to block the "##" fallback from ever running and firing on
+  // the four real sections. Compare how many *canonical* sections each split
+  // actually recovers and prefer whichever level does better, so a stray
+  // deeper heading can't defeat the shallower one that would have worked.
+  if (countCanonicalSections(relaxed) > countCanonicalSections(strict)) {
+    return mergeStraySections(relaxed);
+  }
+
+  if (hasHeadedSection(strict)) return mergeStraySections(strict);
+  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : strict;
 }
 
+// Order matters here beyond display: it is also the canonical field sequence
+// the prompt's "Use this exact format" block asks for (lib/systemPrompt.ts),
+// and parseClipFieldLines() below relies on that sequence to decide whether a
+// line that looks like a field label is a real field transition or just
+// quoted text. Reordering this array changes both what renders first and
+// what parseClipFieldLines() will accept as a forward transition.
 export const CLIP_FIELD_LABELS = [
   "Timestamps",
   "Duration",
@@ -132,6 +169,14 @@ const CLIP_FIELD_PATTERNS = CLIP_FIELD_LABELS.map(
   (key) => [key, fieldLabelPattern(CLIP_FIELD_ALIASES[key])] as const,
 );
 
+// Matches only a field's own literal label (no aliases), used to tell a
+// deliberate field transition from a coincidental alias collision below.
+const CANONICAL_FIELD_PATTERNS = CLIP_FIELD_LABELS.map(
+  (key) => [key, fieldLabelPattern([key])] as const,
+);
+
+const FIELD_ORDER = new Map(CLIP_FIELD_LABELS.map((key, index) => [key, index]));
+
 /**
  * Matches a line that is nothing but an option header. Bold markers, a heading
  * prefix, a list bullet, and trailing punctuation are all tolerated, but the
@@ -173,6 +218,37 @@ export function parseClipFieldLines(
         matchedKey = key;
         valuePart = match[1]?.trim() ?? "";
         break;
+      }
+    }
+
+    // A field label can also just be quoted: a sermon transcript that
+    // literally says "time to reap" or a stray "Why:" mid quote matches one
+    // of the patterns above without being a real new field. Once a field is
+    // already open, only accept the match as a genuine transition when:
+    //  - it moves to the very next field in the prompt's order, or
+    //  - it skips further ahead, but only via that field's own exact label
+    //    rather than a looser alias (an alias is the ambiguous case; the
+    //    literal label is a much stronger signal a field really started), or
+    //  - it moves backward (or restates the current field) to a field that
+    //    hasn't been filled yet, and again only via the exact label. A model
+    //    that emits fields out of the prompt's order still writes each one
+    //    exactly once, so "already filled" is what tells that apart from a
+    //    quote that happens to repeat an earlier field's exact label.
+    if (matchedKey && current) {
+      const currentIndex = FIELD_ORDER.get(current) ?? -1;
+      const matchedIndex = FIELD_ORDER.get(matchedKey) ?? -1;
+      const isNextField = matchedIndex === currentIndex + 1;
+      const isCanonicalLabel = CANONICAL_FIELD_PATTERNS.some(
+        ([key, pattern]) => key === matchedKey && pattern.test(line),
+      );
+      const isUnfilledReorderedField =
+        isCanonicalLabel && !output[matchedKey];
+      const accepted =
+        isNextField ||
+        (matchedIndex > currentIndex && isCanonicalLabel) ||
+        (matchedIndex <= currentIndex && isUnfilledReorderedField);
+      if (!accepted) {
+        matchedKey = null;
       }
     }
 

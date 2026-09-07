@@ -10,9 +10,10 @@ export function buildSystemPrompt(
   // inventing timestamps is worse than an honest "not available": a media
   // director could paste a fabricated time straight into YouTube chapters.
   const chaptersSection = hasTimestamps
-    ? `Generate YouTube chapters using "mm:ss" format.
-TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. You MUST ignore the "hh" and the "frames" parts.
-Example: [00:32:04:22] is 32:04.
+    ? `Generate YouTube chapters using elapsed time, formatted "mm:ss" for the first hour and "h:mm:ss" past it (YouTube's own chapter format).
+TIMESTAMP CONVERSION: Timestamped transcripts use [hh:mm:ss:frames]. Always ignore the "frames" part. For the "hh" part: if it is "00", drop it and write "mm:ss". If it is "01" or higher, KEEP the hour and write "h:mm:ss" — do not discard it.
+Example: [00:32:04:22] is 32:04. Example: [01:02:03:00] is 1:02:03 (one hour, two minutes, three seconds), NOT 02:03.
+This same conversion applies to every timestamp you report, including clip timestamps below.
 FORMAT: List every chapter as a plain line (e.g. "04:49 Why We Need Divine Preparation") under the single "### Chapters" heading. Do NOT give any individual chapter its own "### " or "## " heading.
 The first chapter MUST be 00:00 and titled "Start" or "Introduction."
 
@@ -48,8 +49,17 @@ CHAPTER NAMING RULES:
 - NEVER use generic labels like "Point 1," "Closing," or "Conclusion."
 - Do not reuse any wording from this instruction block itself as a chapter title.`;
 
+  // Equal min/max is a valid (if unusual) slider position: both handles can
+  // land on the same value, which asks for an exact duration rather than a
+  // range. Wording this as a strict open interval would make min === max an
+  // impossible instruction, so the two cases get worded separately instead.
+  const durationRule =
+    clipMinSec === clipMaxSec
+      ? `STRICT DURATION RULE: Each clip's duration MUST be exactly ${clipMinSec} seconds. Make sure the "Duration" value you report matches.`
+      : `STRICT DURATION RULE: Each clip's duration MUST fall between ${clipMinSec} and ${clipMaxSec} seconds, inclusive. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.`;
+
   const clipTimestampRules = hasTimestamps
-    ? `STRICT DURATION RULE: Each clip's duration MUST fall strictly between ${clipMinSec} and ${clipMaxSec} seconds. Do not select a moment shorter than ${clipMinSec}s or longer than ${clipMaxSec}s, and make sure the "Duration" value you report is within this range.
+    ? `${durationRule}
 STRICT VERBATIM RULE: The "Transcript" section MUST be 100% word-for-word identical to the source text. Do not fix stutters, grammar, or word choices.
 METADATA ANCHOR RULE: Before generating a clip, locate the tag immediately preceding the first word of your quote. You MUST use the timestamp associated with that tag.
 STRICT ERROR CHECK: Compare your selected text against the transcript one last time. If one word is different, you have failed.`
@@ -91,7 +101,7 @@ ${clipTimestampRules}
 Use this exact format:
 
 Option 1
-Timestamps: [mm:ss - mm:ss]
+Timestamps: [start - end] (use the same elapsed-time format as the chapters above)
 Duration: [Total seconds]
 Title: [Punchy hook]
 Transcript: [Verbatim text]

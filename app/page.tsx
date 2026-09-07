@@ -83,13 +83,30 @@ const COMMUNITY_DISCLAIMER =
 const AI_LIMIT_NOTICE =
   "We have hit our free limit for the hour. Please try again in a few minutes.";
 
+// A gateway timeout means the connection gave up waiting, not that the quota
+// is exhausted. Conflating it with 429 used to show the "we're out of free
+// uses" message for what might just be a slow upstream, which points the
+// user at the wrong fix (waiting out the hour, instead of just retrying).
+const GATEWAY_TIMEOUT_MESSAGE =
+  "The server took too long to respond. Please try again.";
+
 const FULL_COPY_ATTRIBUTION =
   "Generated with [sermonintelligence.com](https://sermonintelligence.com/)";
 
 function isAiLimitHttpStatus(status: number) {
-  return status === 429 || status === 504;
+  return status === 429;
 }
 
+function isGatewayTimeoutStatus(status: number) {
+  return status === 504;
+}
+
+// Deliberately always AI_LIMIT_NOTICE, not whatever the server's 429 body
+// says: today that body (lib/rateLimit.ts) is just "Too many requests",
+// which is less useful than this constant's "try again in a few minutes"
+// framing. If the rate limiter starts returning something more specific
+// (e.g. an actual reset time), thread it through here then - not before,
+// since doing it speculatively would trade a good message for a worse one.
 function aiLimitError(): Error & { isAiLimit: true } {
   const err = new Error(AI_LIMIT_NOTICE) as Error & { isAiLimit: true };
   err.isAiLimit = true;
@@ -108,6 +125,15 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
 const markdownComponents: NonNullable<
   ComponentProps<typeof ReactMarkdown>["components"]
 > = {
+  // Images aren't part of the output contract - the prompt never asks for
+  // them - so a URL that ends up in the model's response (from the source
+  // transcript or an injected instruction) must not become a live <img> tag.
+  // A rendered image is an automatic, unclickable request to whatever host
+  // that URL names, and any text baked into the URL travels with it. Every
+  // ReactMarkdown instance in this file uses this component map (directly, or
+  // by spreading it, as TitlesBentoCard does), so this one override covers
+  // every rendering site, including restored history.
+  img: () => null,
   a: ({ href, children, ...props }) => (
     <a
       href={href}
@@ -853,7 +879,10 @@ export default function Home() {
   const [output, setOutput] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [limitNotice, setLimitNotice] = useState(false);
+  // Holds the message to show, not just whether to show one: a 504 and a 429
+  // both used to collapse into the same hardcoded AI_LIMIT_NOTICE text, which
+  // discarded whatever the server actually said (see aiLimitError() above).
+  const [limitNotice, setLimitNotice] = useState<string | null>(null);
   const [outputIssues, setOutputIssues] = useState<OutputIssue[]>([]);
   const [copied, setCopied] = useState(false);
 
@@ -928,11 +957,28 @@ export default function Home() {
     setClipMinSec((m) => (m > v ? v : m));
   }, []);
 
+  // Cancelling a generation isn't just about the UI stopping: the previous
+  // implementation created its own AbortController *inside*
+  // streamChatResponse, so nothing outside that closure could ever reach it.
+  // A reset had no way to actually stop the old stream, and its already
+  // queued `setOutput` calls kept landing after the reset until the browser
+  // finally finished (or failed) reading it. generationIdRef gives every
+  // call to runWithText an identity; every state update it makes is gated on
+  // still being the current generation, and activeControllerRef lets a reset
+  // actually abort the underlying fetch instead of just outrunning it.
+  const generationIdRef = useRef(0);
+  const activeControllerRef = useRef<AbortController | null>(null);
+
   const streamChatResponse = useCallback(
-    async (text: string, minSec: number, maxSec: number): Promise<string> => {
+    async (
+      text: string,
+      minSec: number,
+      maxSec: number,
+      controller: AbortController,
+      onChunk: (accumulated: string) => void,
+    ): Promise<string> => {
       // Nothing else bounds this request from the client's side. Without a stall
       // guard a dropped connection leaves the spinner running with no way out.
-      const controller = new AbortController();
       let stalled = false;
       let stallTimer = 0;
       const armStallTimer = () => {
@@ -960,6 +1006,9 @@ export default function Home() {
           if (isAiLimitHttpStatus(res.status)) {
             throw aiLimitError();
           }
+          if (isGatewayTimeoutStatus(res.status)) {
+            throw new Error(GATEWAY_TIMEOUT_MESSAGE);
+          }
           let detail = res.statusText;
           try {
             const err = (await res.json()) as { error?: string };
@@ -981,11 +1030,11 @@ export default function Home() {
           // never cut off. Only silence counts against it.
           armStallTimer();
           accumulated += decoder.decode(value, { stream: true });
-          setOutput(accumulated);
+          onChunk(accumulated);
         }
 
         accumulated += decoder.decode();
-        setOutput(accumulated);
+        onChunk(accumulated);
         return accumulated;
       } catch (e) {
         if (stalled) throw new StalledResponseError();
@@ -1004,16 +1053,41 @@ export default function Home() {
       minSec: number,
       maxSec: number,
     ) => {
+      // Superseding a request should stop it, not just stop listening to it:
+      // without this abort, a request A that "Analyze Another Sermon" walked
+      // away from keeps streaming (and billing) on the server after request
+      // B starts.
+      activeControllerRef.current?.abort();
+      const controller = new AbortController();
+      activeControllerRef.current = controller;
+
+      const generationId = (generationIdRef.current += 1);
+      const isCurrent = () => generationIdRef.current === generationId;
+
       setProcessingLabel(label);
       setOutput("");
       setErrorMessage(null);
-      setLimitNotice(false);
+      setLimitNotice(null);
       setOutputIssues([]);
       setStatus("loading");
       setIsDemo(false);
 
       try {
-        const result = await streamChatResponse(text, minSec, maxSec);
+        const result = await streamChatResponse(
+          text,
+          minSec,
+          maxSec,
+          controller,
+          (accumulated) => {
+            if (isCurrent()) setOutput(accumulated);
+          },
+        );
+
+        // A reset that landed after the stream finished but before this line
+        // runs must not resurrect the output it just cleared, save a history
+        // entry for a generation the user walked away from, or flip status
+        // back off "idle".
+        if (!isCurrent()) return;
 
         // The response headers arrive before the model emits a single token, so
         // a 200 is no promise of usable content. Inspect what actually streamed.
@@ -1028,17 +1102,22 @@ export default function Home() {
 
         saveToHistory(label, result, minSec, maxSec);
         setOutputIssues(issues);
-        setLimitNotice(false);
+        setLimitNotice(null);
         setStatus("idle");
       } catch (e) {
+        if (!isCurrent()) return;
         if (isAiLimitError(e)) {
-          setLimitNotice(true);
+          setLimitNotice(AI_LIMIT_NOTICE);
           setErrorMessage(null);
           setStatus("idle");
           return;
         }
         setStatus("error");
         setErrorMessage(describeRequestFailure(e));
+      } finally {
+        if (activeControllerRef.current === controller) {
+          activeControllerRef.current = null;
+        }
       }
     },
     [saveToHistory, streamChatResponse],
@@ -1112,13 +1191,23 @@ export default function Home() {
   }, [output]);
 
   const analyzeAnotherSermon = useCallback(() => {
+    // Invalidating the generation id first means every callback the
+    // in-flight streamChatResponse still has queued (a chunk already read, a
+    // saveToHistory about to run) checks isCurrent(), finds it stale, and
+    // becomes a no-op instead of overwriting what this reset is about to set.
+    // Aborting on top of that actually stops the fetch, rather than merely
+    // ignoring it while it keeps streaming (and billing) on the server.
+    generationIdRef.current += 1;
+    activeControllerRef.current?.abort();
+    activeControllerRef.current = null;
+
     setOutput("");
     setProcessingLabel("");
     setFileName(null);
     setUploadedText("");
     setPastedText("");
     setErrorMessage(null);
-    setLimitNotice(false);
+    setLimitNotice(null);
     setOutputIssues([]);
     setStatus("idle");
     setCopied(false);
@@ -1143,7 +1232,7 @@ export default function Home() {
     setUploadedText("");
     setPastedText("");
     setErrorMessage(null);
-    setLimitNotice(false);
+    setLimitNotice(null);
     setOutputIssues([]);
     setStatus("idle");
     setCopied(false);
@@ -1171,7 +1260,7 @@ export default function Home() {
   const handleGenerate = useCallback(async () => {
     if (status === "loading") return;
 
-    setLimitNotice(false);
+    setLimitNotice(null);
 
     const minSec = clipMinSec;
     const maxSec = clipMaxSec;
@@ -1314,7 +1403,7 @@ export default function Home() {
             >
               <p className="text-sm font-semibold text-amber-200/90 flex items-center justify-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
-                {AI_LIMIT_NOTICE}
+                {limitNotice}
               </p>
             </div>
           )}

@@ -27,3 +27,20 @@ test("the clip duration bounds still appear for a timed transcript", () => {
   const prompt = buildSystemPrompt(30, 90, true);
   assert.match(prompt, /between 30 and 90 seconds/);
 });
+
+test("equal min and max bounds ask for an exact duration instead of an impossible range", () => {
+  const prompt = buildSystemPrompt(60, 60, true);
+  assert.match(prompt, /exactly 60 seconds/);
+  assert.doesNotMatch(prompt, /between 60 and 60 seconds/);
+});
+
+test("the hour is preserved when converting a timestamp tag, not discarded", () => {
+  const prompt = buildSystemPrompt(15, 120, true);
+  assert.doesNotMatch(prompt, /ignore the "hh"/);
+  assert.match(prompt, /01:02:03:00\] is 1:02:03/);
+  // The old wording's own example proved the bug: it said [00:32:04:22] is
+  // 32:04 while telling the model to discard "hh" - true only because that
+  // example's hour happens to be zero. An hour of "01" or more must not
+  // collapse to the same mm:ss shape.
+  assert.doesNotMatch(prompt, /is 02:03/);
+});
