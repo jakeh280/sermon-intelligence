@@ -101,14 +101,11 @@ function isGatewayTimeoutStatus(status: number) {
   return status === 504;
 }
 
-// `detail` carries the server's actual 429 body. There are two independent
-// rate limiters in front of this route (proxy.ts, which runs first and
-// already computes a real "try again in N minutes" from its own window, and
-// the in-route lib/rateLimit.ts check, which only ever says the generic
-// "Too many requests"), so which message arrives depends on which one
-// tripped - the server's message is worth showing when there is one, with
-// AI_LIMIT_NOTICE only as the fallback for the generic case or a body that
-// didn't parse.
+// `detail` carries the server's actual 429 body, from proxy.ts's rate
+// limiter (the only one in front of this route - it computes a real "try
+// again in N minutes" from its own window). The server's message is worth
+// showing when there is one, with AI_LIMIT_NOTICE only as the fallback for
+// a body that didn't parse.
 function aiLimitError(detail?: string): Error & { isAiLimit: true } {
   const err = new Error(detail || AI_LIMIT_NOTICE) as Error & {
     isAiLimit: true;

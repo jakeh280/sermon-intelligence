@@ -106,10 +106,10 @@ Duration mattered less than the moment`;
 });
 
 test("a field label alias inside the quoted transcript does not truncate it", () => {
-  // Reproduces AUDIT.md F8: "Why:" appears mid quote, one field early (before
-  // Description), via the loose "Why" alias rather than the literal "Why it
-  // works" label. It must stay part of the Transcript instead of silently
-  // starting a new field and losing everything after it.
+  // "Why:" appears mid quote, one field early (before Description), via the
+  // loose "Why" alias rather than the literal "Why it works" label. It must
+  // stay part of the Transcript instead of silently starting a new field
+  // and losing everything after it.
   const body = `Option 1
 Title: Original title
 Transcript: Opening words
@@ -300,7 +300,7 @@ test("heading-ified chapters are also merged through the h2 fallback path", () =
 });
 
 test("a nested h3 inside h2 sections does not block the h2 fallback from recovering them", () => {
-  // Reproduces the shape from AUDIT.md F7: the model uses "## " for the four
+  // Reproduces a shape a model can actually emit: it uses "## " for the four
   // real sections but then heading-ifies a clip option as "### Option 1".
   // The lone "###" heading used to count as "the response has headings",
   // which stopped the "##" fallback from ever running and left everything

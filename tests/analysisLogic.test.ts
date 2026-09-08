@@ -43,9 +43,9 @@ test("API clip bounds use the shared slider rules", () => {
   assert.equal(parseClipBounds(null), null);
 });
 
-// AUDIT.md F6: equal min/max is a valid slider position (an exact duration
-// target), not an error - parseClipBounds already allowed it (min <= max);
-// this pins that down at both the extremes and an interior value.
+// Equal min/max is a valid slider position (an exact duration target), not
+// an error - parseClipBounds already allowed it (min <= max); this pins that
+// down at both the extremes and an interior value.
 test("equal min and max bounds are accepted as an exact duration target", () => {
   assert.deepEqual(
     parseClipBounds({ clipMinSec: 60, clipMaxSec: 60 }),

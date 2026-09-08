@@ -225,18 +225,41 @@ Cannot fetch live YouTube transcripts from Vercel (requests are blocked). Featur
 
 ## Rate Limiting
 
-**Files:** `proxy.ts` at the root, plus `lib/rateLimit.ts` called directly by the API route. The proxy is not a Next.js `middleware.ts`.
+**File:** `proxy.ts` at the root. This is Next.js middleware, not a helper the
+API route calls: as of Next 16, a root `proxy.ts` exporting a `proxy` function
+is auto-wired in and runs before every matching request (`next build` lists it
+as `ƒ Proxy (Middleware)`). It predates that convention - it was originally a
+plain module written before Next 16 introduced the `proxy.ts` name, and the
+Next 16 upgrade silently turned it into real middleware.
+
+Until 2026-09-08 this ran alongside a second, independent check in
+`app/api/chat/route.ts` (`lib/rateLimit.ts`), added earlier and never removed
+once proxy.ts started actually running. The two used different algorithms -
+proxy.ts a fixed window (count resets to zero on the hour), the route-level
+check a sliding window (a rolling list of hit timestamps) - and only the
+sliding window closes a real gap a fixed window has: without it, a burst of
+`MAX_REQUESTS` right before the reset plus another right after can let
+~2x the limit through in a short span straddling the boundary. Consolidating
+to one limiter meant that one had to inherit the sliding-window algorithm,
+not the fixed-window one, or removing the duplicate would have quietly
+doubled the worst-case burst instead of just removing dead weight.
 
 ```typescript
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const MAX_REQUESTS = 20;          // 20 requests per IP per hour
+const MAX_REQUESTS = 20;          // 20 requests per IP in any trailing hour
 ```
 
-Returns HTTP 429 with reset time if exceeded. Configured with `config.matcher = "/api/chat"`.
+Values live in `lib/rateLimitConfig.ts`. The actual sliding-window decision is
+a pure function in `lib/proxyRateLimit.ts` (`checkAndRecord`), kept separate
+from proxy.ts's NextRequest/NextResponse glue so it's unit testable without
+Next's runtime - see `tests/proxyRateLimit.test.ts`. Returns HTTP 429 with a
+"try again in N minutes" reset time if exceeded (computed from when the
+oldest hit in the window ages out, not a fixed clock boundary). Configured
+with `config.matcher = "/api/chat"`.
 
 Raised from 5 to 20 on 2026-07-19: Gemini spend was $0.13 across 90 days against a
 $5 monthly cap, so the old limit throttled real users to guard a cost that never
-materialized. Keep this figure in sync in both limiter files.
+materialized.
 
 **Known limitation:** `ipStore` is an in-process `Map`, and Vercel serverless
 instances neither share memory nor persist across cold starts. So the limit is
@@ -317,26 +340,32 @@ sermon-intelligence/
 │       └── chat/
 │           └── route.ts      # Server endpoint, Gemini API streaming
 ├── lib/
+│   ├── boundedBody.ts        # Reads a request body without exceeding a byte cap
 │   ├── clipRange.ts          # Clip range constants, snapping, and labels
+│   ├── demoContent.ts        # Frozen, attributed output for the "View Demo" button
 │   ├── history.ts            # Safe browser history decoding
 │   ├── historyStorage.ts     # localStorage access that cannot throw
 │   ├── outputHealth.ts       # Empty, unstructured, and truncated response checks
 │   ├── outputParsing.ts      # Pure Markdown and clip output parsing
+│   ├── proxyRateLimit.ts     # Pure rate limit decision logic, called from proxy.ts
 │   ├── requestErrors.ts      # Stall timeout and user facing failure messages
-│   ├── rateLimit.ts          # route level burst limiter and client key
-│   ├── rateLimitConfig.ts    # shared rate limit window and request count
+│   ├── rateLimitConfig.ts    # rate limit window and request count, read by proxy.ts
 │   ├── site.ts               # canonical site metadata and structured data
 │   ├── systemPrompt.ts       # buildSystemPrompt(min, max) function
 │   ├── transcript.ts         # Premiere, SRT, and WebVTT normalization
 │   └── transcriptInput.ts    # Accepted formats, limits, encoding
 ├── tests/
 │   ├── analysisLogic.test.ts # Parser, range, and history regression tests
+│   ├── boundedBody.test.ts           # Request body size cap
 │   ├── browserResilience.test.ts     # Storage, upload, and request failures
+│   ├── demoContent.test.ts           # Demo output stays in sync with the system prompt
 │   ├── outputHealth.test.ts          # Malformed response detection
 │   ├── outputParsingResilience.test.ts # Model formatting drift
+│   ├── proxyRateLimit.test.ts         # Rate limit window, reset message, per-IP keying
+│   ├── systemPrompt.test.ts          # Prompt construction and timestamp rules
 │   └── transcriptFormats.test.ts     # Timestamp and caption formats
 ├── public/                   # Static assets (SVGs, favicon)
-├── proxy.ts                  # Rate limiting logic (not a Next.js middleware)
+├── proxy.ts                  # Next.js middleware (Next 16 convention): per-IP rate limiting
 ├── tsconfig.json
 ├── next.config.ts            # Security response headers
 ├── tailwind.config.js
