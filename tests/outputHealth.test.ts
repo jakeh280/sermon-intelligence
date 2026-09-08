@@ -80,9 +80,8 @@ test("section detection matches the headings the cards render", () => {
   assert.deepEqual(issues, []);
 });
 
-// AUDIT.md F4: a heading with nothing under it, or a Clips section that never
-// finishes, used to pass as healthy because the check only looked at heading
-// names.
+// A heading with nothing under it, or a Clips section that never finishes,
+// used to pass as healthy because the check only looked at heading names.
 
 test("a heading present with an empty body counts as missing, not present", () => {
   const emptyHeadings = "### Titles\n\n### Description\n\n### Chapters\n\n### Clips";

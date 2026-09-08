@@ -9,7 +9,7 @@ export type BoundedBodyResult =
  * `await req.json()` fully reads, decodes, and JSON-parses the entire body
  * before any application code gets a chance to look at its size - so a
  * request large enough to matter pays that full cost regardless of what
- * happens next (AUDIT.md followup 5). This checks the declared
+ * happens next. This checks the declared
  * Content-Length first (a lying or absent header just skips straight to the
  * stream), then reads the stream chunk by chunk, cancelling it and bailing
  * out the moment the running total crosses `maxBytes` instead of waiting for

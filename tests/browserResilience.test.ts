@@ -109,12 +109,12 @@ test("a storage that refuses every write reports an empty history", () => {
   assert.equal(refusing.value, null);
 });
 
-// AUDIT.md followup 4: a write that doesn't fit anywhere, even at a single
-// item, isn't evidence the list already on disk is bad - it's evidence this
-// particular write is too big. The old fallback called clearStoredHistory()
-// here, which destroyed a previously persisted history over an unrelated
-// write failure. Reads and removal still working (as this fakeStorage's do)
-// is exactly the case where that used to happen silently.
+// A write that doesn't fit anywhere, even at a single item, isn't evidence
+// the list already on disk is bad - it's evidence this particular write is
+// too big. The old fallback called clearStoredHistory() here, which
+// destroyed a previously persisted history over an unrelated write failure.
+// Reads and removal still working (as this fakeStorage's do) is exactly the
+// case where that used to happen silently.
 test("a write that cannot fit at all leaves the existing history untouched", () => {
   const existing = [item("kept")];
   const roomForExisting = JSON.stringify(existing).length;

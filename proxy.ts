@@ -3,50 +3,33 @@ import {
   RATE_LIMIT_MAX_REQUESTS,
   RATE_LIMIT_WINDOW_MS,
 } from "@/lib/rateLimitConfig";
+import { checkAndRecord, getClientIp } from "@/lib/proxyRateLimit";
 
-const ipStore = new Map<string, { count: number; windowStart: number }>();
+const ipStore = new Map<string, number[]>();
 
 // Raised from 5 on 2026-07-19. Gemini spend was $0.13 across 90 days against a
 // $5 monthly cap, so the old limit was throttling real users to protect against
 // a cost that never materialized.
-
-function getIp(req: NextRequest): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown"
-  );
-}
-
-function evictStale() {
-  const now = Date.now();
-  for (const [ip, entry] of ipStore) {
-    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) ipStore.delete(ip);
-  }
-}
 
 export function proxy(req: NextRequest) {
   if (!req.nextUrl.pathname.startsWith("/api/chat")) {
     return NextResponse.next();
   }
 
-  evictStale();
+  const ip = getClientIp(req.headers);
+  const result = checkAndRecord(
+    ipStore,
+    ip,
+    Date.now(),
+    RATE_LIMIT_WINDOW_MS,
+    RATE_LIMIT_MAX_REQUESTS,
+  );
 
-  const ip = getIp(req);
-  const now = Date.now();
-  const entry = ipStore.get(ip);
-
-  if (!entry || now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    ipStore.set(ip, { count: 1, windowStart: now });
-    return NextResponse.next();
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
-    const resetInMs = RATE_LIMIT_WINDOW_MS - (now - entry.windowStart);
-    const resetInMin = Math.ceil(resetInMs / 60000);
+  if (result.limited) {
+    const { resetInMinutes } = result;
     return new NextResponse(
       JSON.stringify({
-        error: `Rate limit reached. Try again in ${resetInMin} minute${resetInMin !== 1 ? "s" : ""}.`,
+        error: `Rate limit reached. Try again in ${resetInMinutes} minute${resetInMinutes !== 1 ? "s" : ""}.`,
       }),
       {
         status: 429,
@@ -55,7 +38,6 @@ export function proxy(req: NextRequest) {
     );
   }
 
-  entry.count++;
   return NextResponse.next();
 }
 

@@ -3,7 +3,6 @@ import { streamText } from "ai";
 import { readBoundedBody } from "@/lib/boundedBody";
 import { parseClipBounds } from "@/lib/clipRange";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
-import { isRateLimited, clientKey } from "@/lib/rateLimit";
 import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
 import {
   MAX_REQUEST_BODY_BYTES,
@@ -27,9 +26,13 @@ function jsonError(status: number, message: string): Response {
 }
 
 export async function POST(req: Request) {
-  if (isRateLimited(clientKey(req))) {
-    return jsonError(429, "Too many requests. Please try again later.");
-  }
+  // Rate limiting happens one layer up, in proxy.ts (Next's middleware
+  // convention as of Next 16 - the root `proxy.ts` file with a `proxy`
+  // export is auto-wired in, not a helper this route calls). It runs before
+  // this handler on every /api/chat request and uses a sliding window (see
+  // lib/proxyRateLimit.ts), so a second check here would add no coverage a
+  // fixed-window route-level check used to close - it would just duplicate
+  // the same guarantee proxy.ts already enforces.
 
   // `await req.json()` would fully buffer, decode, and parse the entire body
   // before any size check could run, so a request large enough to matter
