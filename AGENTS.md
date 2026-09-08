@@ -147,9 +147,24 @@ there so format changes can be tested without rendering the page.
 
 Parsing is deliberately tolerant of formatting the model drifts into: option
 headers behind bold, headings or bullets; field labels with the colon inside the
-bold; and a fallback to `## ` headings when a response contains no `### ` at
-all. An option header must still be the entire line, so quoted text cannot split
-a clip.
+bold; treating `### ` and `## ` as the *same* heading level (see below); and
+heading-shaped lines inside a fenced code block, which are masked before
+splitting so a quoted excerpt can't be mistaken for a section boundary. An
+option header must still be the entire line, so quoted text cannot split a
+clip, and a clip field label only starts a new field when it's the next
+expected one (or that field's own exact label, not a looser alias) - so a
+stray "Why:"/"Time:"/"Title:" inside a verbatim quote can't truncate it.
+
+Sections split on `/^#{2,3}\s+/m` - "### " and "## " are matched by the same
+pass, not tried as two separate strict/relaxed candidates. An earlier version
+did try them separately and picked whichever recovered more of the four
+canonical sections, which broke down when the model used *different* levels
+for sibling sections (e.g. "### Titles" alongside "## Chapters"): both passes
+recovered 2 of 4 and tied, and the tie-break kept only one pair while the
+other's content was swallowed into the section before it. Matching both
+levels in one pass recovers all four regardless of which level the model used
+per section. "####" is deliberately excluded, since it's plausible as a
+subheading inside a well formed section.
 
 The model sometimes over-applies "every section starts with `### `" and gives
 each individual chapter its own heading instead of listing them under one
@@ -160,8 +175,9 @@ Description, Chapters, Clips) is folded back into the section before it as a
 list line instead of kept as its own section.
 
 `lib/outputHealth.ts` inspects a **completed** response and reports empty,
-unstructured, or missing-section results. Never run it mid stream: a partial
-stream is legitimately missing sections.
+unstructured, missing-section, or incomplete-clips results (a Clips section
+whose heading and body arrived but didn't resolve to 3 fully-fielded clips).
+Never run it mid stream: a partial stream is legitimately missing sections.
 
 AI response is streamed as Markdown and parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`

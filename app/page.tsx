@@ -101,14 +101,18 @@ function isGatewayTimeoutStatus(status: number) {
   return status === 504;
 }
 
-// Deliberately always AI_LIMIT_NOTICE, not whatever the server's 429 body
-// says: today that body (lib/rateLimit.ts) is just "Too many requests",
-// which is less useful than this constant's "try again in a few minutes"
-// framing. If the rate limiter starts returning something more specific
-// (e.g. an actual reset time), thread it through here then - not before,
-// since doing it speculatively would trade a good message for a worse one.
-function aiLimitError(): Error & { isAiLimit: true } {
-  const err = new Error(AI_LIMIT_NOTICE) as Error & { isAiLimit: true };
+// `detail` carries the server's actual 429 body. There are two independent
+// rate limiters in front of this route (proxy.ts, which runs first and
+// already computes a real "try again in N minutes" from its own window, and
+// the in-route lib/rateLimit.ts check, which only ever says the generic
+// "Too many requests"), so which message arrives depends on which one
+// tripped - the server's message is worth showing when there is one, with
+// AI_LIMIT_NOTICE only as the fallback for the generic case or a body that
+// didn't parse.
+function aiLimitError(detail?: string): Error & { isAiLimit: true } {
+  const err = new Error(detail || AI_LIMIT_NOTICE) as Error & {
+    isAiLimit: true;
+  };
   err.isAiLimit = true;
   return err;
 }
@@ -260,6 +264,24 @@ const markdownComponents: NonNullable<
   ),
 };
 
+/** Shared by every card's "Copy section" button - same clipboard write, same 2s "Copied" flash. */
+function useCopyToClipboard(text: string) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
+  return { copied, handleCopy };
+}
+
 function BentoCard({
   title,
   body,
@@ -271,18 +293,7 @@ function BentoCard({
   streaming: boolean;
   className?: string;
 }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!body) return;
-    try {
-      await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy", err);
-    }
-  };
+  const { copied, handleCopy } = useCopyToClipboard(body);
 
   return (
     <article
@@ -344,18 +355,7 @@ function TitlesBentoCard({
   streaming: boolean;
   className?: string;
 }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!body) return;
-    try {
-      await navigator.clipboard.writeText(body);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy", err);
-    }
-  };
+  const { copied, handleCopy } = useCopyToClipboard(body);
 
   const titleMarkdownComponents: NonNullable<ComponentProps<typeof ReactMarkdown>["components"]> = {
     ...markdownComponents,
@@ -560,7 +560,10 @@ function ClipsBentoCard({
         )}
       </header>
 
-      {preamble ? (
+      {/* Gated on showClipGrid: when it's false, the fallback branch below
+          renders the full raw `body` (which still contains this same
+          preamble text), so rendering it here too would show it twice. */}
+      {showClipGrid && preamble ? (
         <p className="mb-6 max-w-3xl text-base leading-7 text-zinc-400">{preamble}</p>
       ) : null}
 
@@ -952,8 +955,7 @@ export default function Home() {
     setClipMaxSec(item.clipMaxSec);
     setProcessingLabel(item.label);
     setShowHistory(false);
-    setIsDemo(false);
-    setHistorySaveFailed(false);
+    resetResultState(false);
 
     // Entries saved before empty responses were rejected can still be blank, and
     // a blank one renders no cards at all. Say so rather than showing an empty page.
@@ -1024,18 +1026,25 @@ export default function Home() {
           signal: controller.signal,
         });
         if (!res.ok) {
-          if (isAiLimitHttpStatus(res.status)) {
-            throw aiLimitError();
-          }
           if (isGatewayTimeoutStatus(res.status)) {
             throw new Error(GATEWAY_TIMEOUT_MESSAGE);
           }
-          let detail = res.statusText;
+
+          // Only a message that actually came from the parsed body counts as
+          // "the server's message" below - res.statusText is just the
+          // generic HTTP reason phrase (e.g. "Too Many Requests"), and
+          // showing that in place of AI_LIMIT_NOTICE on a body-parse failure
+          // would be a worse fallback, not a better one.
+          let bodyMessage: string | undefined;
           try {
             const err = (await res.json()) as { error?: string };
-            if (err.error) detail = err.error;
+            if (err.error) bodyMessage = err.error;
           } catch { /* ignore */ }
-          throw new Error(detail || "Request failed");
+
+          if (isAiLimitHttpStatus(res.status)) {
+            throw aiLimitError(bodyMessage);
+          }
+          throw new Error(bodyMessage || res.statusText || "Request failed");
         }
 
         const reader = res.body?.getReader();
@@ -1067,6 +1076,20 @@ export default function Home() {
     [],
   );
 
+  // The state that has to be cleared every time a new result is about to
+  // replace whatever's currently showing - a fresh generation starting, a
+  // reset, or the demo loading - regardless of which of those three it is.
+  // outputIssues and historySaveFailed were both added, one at a time, to
+  // all three call sites individually; consolidating here means the next
+  // one only has to be added once.
+  const resetResultState = useCallback((isDemo: boolean) => {
+    setErrorMessage(null);
+    setLimitNotice(null);
+    setOutputIssues([]);
+    setHistorySaveFailed(false);
+    setIsDemo(isDemo);
+  }, []);
+
   const runWithText = useCallback(
     async (
       text: string,
@@ -1087,12 +1110,8 @@ export default function Home() {
 
       setProcessingLabel(label);
       setOutput("");
-      setErrorMessage(null);
-      setLimitNotice(null);
-      setOutputIssues([]);
-      setHistorySaveFailed(false);
+      resetResultState(false);
       setStatus("loading");
-      setIsDemo(false);
 
       try {
         const result = await streamChatResponse(
@@ -1129,7 +1148,7 @@ export default function Home() {
       } catch (e) {
         if (!isCurrent()) return;
         if (isAiLimitError(e)) {
-          setLimitNotice(AI_LIMIT_NOTICE);
+          setLimitNotice(e.message);
           setErrorMessage(null);
           setStatus("idle");
           return;
@@ -1142,7 +1161,7 @@ export default function Home() {
         }
       }
     },
-    [saveToHistory, streamChatResponse],
+    [resetResultState, saveToHistory, streamChatResponse],
   );
 
   // Every call claims a new id; a read whose id no longer matches
@@ -1173,10 +1192,6 @@ export default function Home() {
       const reader = new FileReader();
       reader.onload = () => {
         if (!isCurrentRead()) return;
-        // A generation already running takes priority over a slow file read
-        // that finishes after the user moved on to Generate: it must not
-        // flip status back to idle (or error) out from under it.
-        if (statusRef.current === "loading") return;
 
         // Read as bytes rather than text so a byte order mark can pick the
         // encoding. Windows transcript exports are still often UTF-16.
@@ -1188,20 +1203,24 @@ export default function Home() {
         if (textProblem) {
           setFileName(null);
           setUploadedText("");
-          setStatus("error");
           setErrorMessage(textProblem);
+          // A generation already running takes priority: this read finishing
+          // after the user moved on to Generate must not flip status back to
+          // error out from under it. The file data above is still captured
+          // (or cleared) either way - only the status transition is skipped.
+          if (statusRef.current !== "loading") setStatus("error");
           return;
         }
 
         setFileName(file.name);
         setUploadedText(text);
         setErrorMessage(null);
-        setStatus("idle");
+        if (statusRef.current !== "loading") setStatus("idle");
       };
       reader.onerror = () => {
         if (!isCurrentRead()) return;
-        if (statusRef.current === "loading") return;
-        setStatus("error");
+        setErrorMessage("Could not read that file.");
+        if (statusRef.current !== "loading") setStatus("error");
         setErrorMessage("Could not read that file.");
       };
       reader.readAsArrayBuffer(file);
@@ -1248,16 +1267,12 @@ export default function Home() {
     setFileName(null);
     setUploadedText("");
     setPastedText("");
-    setErrorMessage(null);
-    setLimitNotice(null);
-    setOutputIssues([]);
-    setHistorySaveFailed(false);
+    resetResultState(false);
     setStatus("idle");
     setCopied(false);
-    setIsDemo(false);
     if (inputRef.current) inputRef.current.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [resetResultState]);
 
   // Loads the frozen demo output directly, with no request and no rate limit
   // spent: DEMO_OUTPUT is a real, previously generated and hand verified
@@ -1274,18 +1289,14 @@ export default function Home() {
     setFileName(null);
     setUploadedText("");
     setPastedText("");
-    setErrorMessage(null);
-    setLimitNotice(null);
-    setOutputIssues([]);
-    setHistorySaveFailed(false);
+    resetResultState(true);
     setStatus("idle");
     setCopied(false);
-    setIsDemo(true);
     // No scroll call here: the button sits at the very top of the page, so
     // scrolling to 0 (the pattern used elsewhere) is a no-op when already
     // there, and the results div doesn't exist in the DOM until this state
     // change commits. See the isDemo effect below instead.
-  }, [status]);
+  }, [resetResultState, status]);
 
   // Runs after the results div above has actually committed to the DOM
   // (unlike requestAnimationFrame, a passive effect isn't tied to the

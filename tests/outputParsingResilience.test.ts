@@ -318,3 +318,23 @@ test("a nested h3 inside h2 sections does not block the h2 fallback from recover
   assert.equal(clips.length, 1);
   assert.equal(clips[0]?.Title, "Synthetic");
 });
+
+test("sibling sections at different heading levels are both recovered, not just one pair", () => {
+  // A model that uses "### " for two of the four real sections and "## " for
+  // the other two (not nested inside one another - genuine siblings at
+  // different levels) used to tie 2-canonical-sections-recovered against
+  // 2-canonical-sections-recovered between the old strict/relaxed passes,
+  // and the tie-break kept only one pair - swallowing the other pair's
+  // content whole into the section before it.
+  const sections = parseBentoSections(
+    "### Titles\nSynthetic titles\n\n### Description\nSynthetic description\n\n## Chapters\n00:00 Start\n\n## Clips\nOption 1\nTitle: Synthetic",
+  );
+  assert.deepEqual(
+    sections.map((section) => section.title),
+    ["Titles", "Description", "Chapters", "Clips"],
+  );
+  assert.equal(
+    sections.find((section) => section.title === "Description")?.body,
+    "Synthetic description",
+  );
+});

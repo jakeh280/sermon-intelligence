@@ -1,7 +1,7 @@
-import { parseHistory, type HistoryItem } from "./history.ts";
+import { HISTORY_LIMIT, parseHistory, type HistoryItem } from "./history.ts";
 
 export const HISTORY_KEY = "sermon_history";
-export const HISTORY_LIMIT = 10;
+export { HISTORY_LIMIT };
 
 /** The slice of `Storage` this module needs, so tests can supply a fake. */
 export type HistoryStorage = {
@@ -62,6 +62,16 @@ export function writeHistory(
 ): HistoryItem[] {
   const capped = items.slice(0, HISTORY_LIMIT);
   if (!storage) return capped;
+
+  if (capped.length === 0) {
+    // An empty target list is a real, deliberate state (the last item was
+    // just deleted), not a write that failed to fit - the loop below never
+    // runs for a zero-length list, which would otherwise fall through to
+    // the "every attempt failed" fallback and read back whatever was on
+    // disk *before* this call, undoing the deletion it was asked to make.
+    clearStoredHistory(storage);
+    return [];
+  }
 
   for (let size = capped.length; size > 0; size -= 1) {
     const attempt = capped.slice(0, size);

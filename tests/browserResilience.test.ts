@@ -129,6 +129,21 @@ test("a write that cannot fit at all leaves the existing history untouched", () 
   assert.deepEqual(readHistory(storage), existing);
 });
 
+test("deleting down to zero items actually clears storage instead of restoring what was deleted", () => {
+  // Reproduces a real bug: writeHistory([]) has nothing to attempt (the
+  // shrink loop never runs for a zero-length list), so it used to fall into
+  // the "every attempt failed, leave storage alone" fallback and read back
+  // the item this call was asked to delete - undoing the deletion.
+  const storage = fakeStorage();
+  writeHistory(storage, [item("only")]);
+
+  const result = writeHistory(storage, []);
+
+  assert.deepEqual(result, []);
+  assert.deepEqual(readHistory(storage), []);
+  assert.equal(storage.value, null);
+});
+
 test("history ids are unique and survive crypto.randomUUID being unavailable", () => {
   const ids = new Set(Array.from({ length: 50 }, () => createHistoryId()));
   assert.equal(ids.size, 50);

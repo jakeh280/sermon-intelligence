@@ -85,10 +85,6 @@ function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
   return sections;
 }
 
-function hasHeadedSection(sections: BentoSection[]): boolean {
-  return sections.some((section) => section.title !== DRAFT_SECTION_TITLE);
-}
-
 /** True for the four section titles the prompt actually defines, plus the preamble bucket. */
 function isCanonicalSectionTitle(title: string): boolean {
   return (
@@ -109,10 +105,8 @@ function isCanonicalSectionTitle(title: string): boolean {
  * weren't real sections.
  *
  * The prompt only ever defines four headings (Titles, Description, Chapters,
- * Clips), so any other "### " heading is folded back into the section before
- * it as a list line rather than kept as its own card. This runs after both
- * the "###" and the "##" fallback split, so it also cleans up a "##"
- * response that drifts the same way.
+ * Clips), so any other "### " or "## " heading is folded back into the
+ * section before it as a list line rather than kept as its own card.
  */
 function mergeStraySections(sections: BentoSection[]): BentoSection[] {
   const merged: BentoSection[] = [];
@@ -131,40 +125,23 @@ function mergeStraySections(sections: BentoSection[]): BentoSection[] {
   return merged;
 }
 
-/** How many of the four sections the prompt actually defines this split recovered. */
-function countCanonicalSections(sections: BentoSection[]): number {
-  return sections.filter(
-    (section) =>
-      isTitlesSectionTitle(section.title) ||
-      isDescriptionSectionTitle(section.title) ||
-      isChaptersSectionTitle(section.title) ||
-      isClipsSectionTitle(section.title),
-  ).length;
-}
+// Matches "### " or "## " as one heading level, not two separate ones to
+// choose between. An earlier version split on "###" and "##" as two
+// independent passes and picked whichever recovered more of the four
+// canonical sections - which broke down exactly when a response used both
+// levels for different *sibling* sections (e.g. "### Titles"/"### Description"
+// alongside "## Chapters"/"## Clips"): each pass recovered 2 of the 4 real
+// sections, tied, and the tie-break arbitrarily kept one pair while the
+// other pair's content was swallowed whole into the section before it.
+// Matching both levels in a single pass recovers all four regardless of
+// which level the model used for which section. "####" is deliberately
+// excluded: it's plausible as a subheading inside a well formed section, so
+// treating it as a boundary could shred a response rather than rescue one.
+const HEADING_MARKER = /^#{2,3}\s+/m;
 
 export function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
-  const strict = splitOnHeading(trimmed, /^###\s+/m);
-
-  // The prompt asks for "### " headings, but a model that answers with "## "
-  // instead would otherwise collapse into one untitled card. Only "##" is worth
-  // retrying: "####" is plausible as a subheading inside a well formed section,
-  // so falling back to it could shred a response rather than rescue one.
-  const relaxed = splitOnHeading(trimmed, /^##\s+/m);
-
-  // The mere presence of a "###" heading isn't proof the response is well
-  // formed at that level: a model that writes "## Titles" ... "## Clips" and
-  // then nests "### Option 1" inside Clips has one "###" heading, which used
-  // to be enough to block the "##" fallback from ever running and firing on
-  // the four real sections. Compare how many *canonical* sections each split
-  // actually recovers and prefer whichever level does better, so a stray
-  // deeper heading can't defeat the shallower one that would have worked.
-  if (countCanonicalSections(relaxed) > countCanonicalSections(strict)) {
-    return mergeStraySections(relaxed);
-  }
-
-  if (hasHeadedSection(strict)) return mergeStraySections(strict);
-  return hasHeadedSection(relaxed) ? mergeStraySections(relaxed) : strict;
+  return mergeStraySections(splitOnHeading(trimmed, HEADING_MARKER));
 }
 
 // Order matters here beyond display: it is also the canonical field sequence
