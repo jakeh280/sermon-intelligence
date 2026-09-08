@@ -147,20 +147,24 @@ there so format changes can be tested without rendering the page.
 
 Parsing is deliberately tolerant of formatting the model drifts into: option
 headers behind bold, headings or bullets; field labels with the colon inside the
-bold; a fallback to `## ` headings; and heading-shaped lines inside a fenced
-code block, which are masked before splitting so a quoted excerpt can't be
-mistaken for a section boundary. An option header must still be the entire
-line, so quoted text cannot split a clip, and a clip field label only starts a
-new field when it's the next expected one (or that field's own exact label,
-not a looser alias) - so a stray "Why:"/"Time:"/"Title:" inside a verbatim
-quote can't truncate it.
+bold; treating `### ` and `## ` as the *same* heading level (see below); and
+heading-shaped lines inside a fenced code block, which are masked before
+splitting so a quoted excerpt can't be mistaken for a section boundary. An
+option header must still be the entire line, so quoted text cannot split a
+clip, and a clip field label only starts a new field when it's the next
+expected one (or that field's own exact label, not a looser alias) - so a
+stray "Why:"/"Time:"/"Title:" inside a verbatim quote can't truncate it.
 
-The `## ` fallback isn't "only when there's no `### ` anywhere": `## ` is
-preferred over `### ` whenever it actually recovers more of the four
-canonical sections, since a lone stray `### ` nested inside an otherwise
-well-formed `## ` response (e.g. a heading-ified clip option) would otherwise
-block the fallback from ever running. See `countCanonicalSections()` in
-`lib/outputParsing.ts`.
+Sections split on `/^#{2,3}\s+/m` - "### " and "## " are matched by the same
+pass, not tried as two separate strict/relaxed candidates. An earlier version
+did try them separately and picked whichever recovered more of the four
+canonical sections, which broke down when the model used *different* levels
+for sibling sections (e.g. "### Titles" alongside "## Chapters"): both passes
+recovered 2 of 4 and tied, and the tie-break kept only one pair while the
+other's content was swallowed into the section before it. Matching both
+levels in one pass recovers all four regardless of which level the model used
+per section. "####" is deliberately excluded, since it's plausible as a
+subheading inside a well formed section.
 
 The model sometimes over-applies "every section starts with `### `" and gives
 each individual chapter its own heading instead of listing them under one
