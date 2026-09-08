@@ -8,7 +8,7 @@ import {
   parseClipBounds,
   snapClipSec,
 } from "../lib/clipRange.ts";
-import { parseHistory } from "../lib/history.ts";
+import { HISTORY_LIMIT, parseHistory } from "../lib/history.ts";
 import {
   isClipsSectionTitle,
   parseBentoSections,
@@ -115,6 +115,23 @@ test("history parsing discards corruption instead of crashing the page", () => {
   ]));
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0]?.id, "good");
+});
+
+test("history parsing caps at HISTORY_LIMIT, same as writeHistory's cap", () => {
+  const item = (id: string) => ({
+    id,
+    timestamp: 1,
+    label: "Sunday",
+    output: "Result",
+    clipMinSec: 15,
+    clipMaxSec: 120,
+  });
+  const many = Array.from({ length: HISTORY_LIMIT + 4 }, (_, i) =>
+    item(`id-${i}`),
+  );
+  const parsed = parseHistory(JSON.stringify(many));
+  assert.equal(parsed.length, HISTORY_LIMIT);
+  assert.equal(parsed[0]?.id, "id-0");
 });
 
 test("Premiere transcript blocks become prompt timestamp tags", () => {

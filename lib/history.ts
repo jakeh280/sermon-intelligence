@@ -7,6 +7,13 @@ export type HistoryItem = {
   clipMaxSec: number;
 };
 
+// Lives here, not in historyStorage.ts (which imports parseHistory from this
+// module and would create a circular import the other way), even though
+// it's really about how much history is kept on write. writeHistory() in
+// historyStorage.ts re-exports it so existing imports of it from there keep
+// working.
+export const HISTORY_LIMIT = 10;
+
 function isHistoryItem(value: unknown): value is HistoryItem {
   if (typeof value !== "object" || value === null) return false;
   const item = value as Record<string, unknown>;
@@ -28,7 +35,7 @@ export function parseHistory(raw: string | null): HistoryItem[] {
   try {
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value)) return [];
-    return value.filter(isHistoryItem).slice(0, 10);
+    return value.filter(isHistoryItem).slice(0, HISTORY_LIMIT);
   } catch {
     return [];
   }

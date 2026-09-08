@@ -19,12 +19,16 @@ const google = createGoogleGenerativeAI({
 // Vercel Serverless (Node.js) runtime
 export const maxDuration = 60;
 
+function jsonError(status: number, message: string): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export async function POST(req: Request) {
   if (isRateLimited(clientKey(req))) {
-    return new Response(
-      JSON.stringify({ error: "Too many requests. Please try again later." }),
-      { status: 429, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonError(429, "Too many requests. Please try again later.");
   }
 
   // `await req.json()` would fully buffer, decode, and parse the entire body
@@ -38,20 +42,14 @@ export async function POST(req: Request) {
     MAX_REQUEST_BODY_BYTES,
   );
   if (!bounded.ok) {
-    return new Response(JSON.stringify({ error: TOO_LONG_MESSAGE }), {
-      status: 413,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError(413, TOO_LONG_MESSAGE);
   }
 
   let body: unknown;
   try {
     body = JSON.parse(bounded.text);
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError(400, "Invalid JSON body");
   }
 
   const rawText =
@@ -64,42 +62,25 @@ export async function POST(req: Request) {
   const text = normalizeTranscript(rawText);
 
   if (!text) {
-    return new Response(
-      JSON.stringify({ error: "Missing or empty `text` in request body" }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return jsonError(400, "Missing or empty `text` in request body");
   }
 
   if (text.length > MAX_TRANSCRIPT_CHARACTERS) {
-    return new Response(JSON.stringify({ error: TOO_LONG_MESSAGE }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError(400, TOO_LONG_MESSAGE);
   }
 
   const clips = parseClipBounds(body);
   if (!clips) {
-    return new Response(
-      JSON.stringify({
-        error: "Invalid clip settings.",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonError(400, "Invalid clip settings.");
   }
 
   // Without this the request reaches the provider, fails after the stream has
   // already returned 200, and the user sees an empty result with no reason.
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     console.error("AI_ROUTE_ERROR: GOOGLE_GENERATIVE_AI_API_KEY is not set");
-    return new Response(
-      JSON.stringify({
-        error:
-          "The analysis service is not configured right now. Please try again later.",
-      }),
-      { status: 503, headers: { "Content-Type": "application/json" } },
+    return jsonError(
+      503,
+      "The analysis service is not configured right now. Please try again later.",
     );
   }
 
@@ -127,14 +108,11 @@ export async function POST(req: Request) {
     return result.toTextStreamResponse();
   } catch (err) {
     console.error("AI_ROUTE_ERROR:", err);
-    return new Response(
-      JSON.stringify({
-        error: err instanceof Error ? err.message : "AI connection failed. Please check your API key and quota.",
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      },
+    return jsonError(
+      500,
+      err instanceof Error
+        ? err.message
+        : "AI connection failed. Please check your API key and quota.",
     );
   }
 }
