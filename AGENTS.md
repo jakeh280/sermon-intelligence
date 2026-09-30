@@ -261,6 +261,21 @@ Raised from 5 to 20 on 2026-07-19: Gemini spend was $0.13 across 90 days against
 $5 monthly cap, so the old limit throttled real users to guard a cost that never
 materialized.
 
+**Which address is limited (2026-09-30):** the custom domain is proxied through
+Cloudflare in front of Vercel, and Vercel overwrites `x-forwarded-for` with the
+connecting address (its documented behavior; not probed live), a Cloudflare edge
+shared by every visitor routed through that location. That most likely put a whole
+region in one 20-per-hour bucket. The fix is correct either way: if Vercel ever
+appends instead, the first entry is already the visitor and nothing changes.
+`getClientIp` now uses `cf-connecting-ip` (the visitor's own address), but only when
+the connecting address is inside Cloudflare's published ranges
+(`lib/cloudflareIps.ts`), because anyone calling the Vercel origin directly can send
+that header. Tests cover both the proxied case and a forged header.
+
+**Also on the route (same date):** non-JSON requests get a 415 (a cross-site
+`text/plain` POST skips the CORS preflight), provider error messages are logged but no
+longer returned to visitors, and `maxOutputTokens: 16000` caps a runaway generation.
+
 **Known limitation:** `ipStore` is an in-process `Map`, and Vercel serverless
 instances neither share memory nor persist across cold starts. So the limit is
 best effort: counts reset on a cold start and are tracked per instance, not

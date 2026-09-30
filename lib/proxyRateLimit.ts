@@ -16,15 +16,29 @@
  * would have quietly loosened the real guarantee.
  */
 
+import { isCloudflareIp } from "./cloudflareIps.ts";
+
 /** The slice of `Headers` this module needs, so tests can supply a plain object. */
 export type HeaderReader = { get(name: string): string | null };
 
+/**
+ * The address to rate-limit on. Vercel overwrites `x-forwarded-for` with the
+ * address that connected to it, which for the Cloudflare-proxied domain is a
+ * Cloudflare edge shared by every visitor routed through that location, so on
+ * its own it most likely put a whole region in one 20-per-hour bucket (Vercel's
+ * documented behavior; not probed live). When the connecting
+ * address is a real Cloudflare edge, `cf-connecting-ip` carries the visitor's
+ * own address; otherwise (direct hits on the Vercel origin, local dev) that
+ * header could be forged, so the connecting address is used as before.
+ */
 export function getClientIp(headers: HeaderReader): string {
-  return (
+  const connecting =
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     headers.get("x-real-ip") ??
-    "unknown"
-  );
+    null;
+  const visitor = headers.get("cf-connecting-ip")?.trim();
+  if (visitor && connecting && isCloudflareIp(connecting)) return visitor;
+  return connecting ?? "unknown";
 }
 
 function prune(timestamps: number[], now: number, windowMs: number): number[] {
