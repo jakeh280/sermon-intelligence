@@ -23,6 +23,26 @@ test("client ip prefers x-forwarded-for, falls back to x-real-ip, then unknown",
   assert.equal(getClientIp(headers({})), "unknown");
 });
 
+test("behind a Cloudflare edge, the visitor's own address is used", () => {
+  assert.equal(
+    getClientIp(
+      headers({ "x-forwarded-for": "172.68.10.20", "cf-connecting-ip": "203.0.113.7" }),
+    ),
+    "203.0.113.7",
+  );
+});
+
+test("a forged cf-connecting-ip on a direct (non-Cloudflare) request is ignored", () => {
+  assert.equal(
+    getClientIp(
+      headers({ "x-forwarded-for": "198.51.100.9", "cf-connecting-ip": "203.0.113.7" }),
+    ),
+    "198.51.100.9",
+  );
+  // No connecting address at all: never trust the header on its own.
+  assert.equal(getClientIp(headers({ "cf-connecting-ip": "203.0.113.7" })), "unknown");
+});
+
 test("requests under the limit are allowed and counted", () => {
   const store = new Map<string, number[]>();
   const now = Date.now();

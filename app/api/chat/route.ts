@@ -39,6 +39,13 @@ export async function POST(req: Request) {
   // pays that full cost regardless of what happens next. This bounds the
   // read itself, refusing as soon as either the declared Content-Length or
   // the actual bytes read cross the cap.
+  // The app always posts JSON. A cross-site form or text/plain POST skips the
+  // CORS preflight entirely, so without this check another page could make a
+  // visitor's browser spend Gemini calls against this route.
+  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+    return jsonError(415, "Expected a JSON request body.");
+  }
+
   const bounded = await readBoundedBody(
     req.body,
     req.headers.get("content-length"),
@@ -106,16 +113,20 @@ export async function POST(req: Request) {
       // actual fetch() call to Gemini, so this genuinely cancels the upstream
       // request rather than just detaching from it.
       abortSignal: req.signal,
+      // Far above any real result (descriptions, chapters, and clips for a long
+      // sermon are a few thousand tokens). It only stops a runaway generation
+      // from looping until the 60s function timeout.
+      maxOutputTokens: 16000,
     });
 
     return result.toTextStreamResponse();
   } catch (err) {
+    // Full detail goes to the server log only; provider errors can carry
+    // request IDs, quota details, or config hints that visitors should not see.
     console.error("AI_ROUTE_ERROR:", err);
     return jsonError(
       500,
-      err instanceof Error
-        ? err.message
-        : "AI connection failed. Please check your API key and quota.",
+      "The analysis failed on our end. Please try again in a minute.",
     );
   }
 }
