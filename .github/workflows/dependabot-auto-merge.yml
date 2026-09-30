@@ -40,10 +40,11 @@ jobs:
       #   still be the PR's current head. Without this, an old successful run
       #   completing after the PR was updated - or simply completing late -
       #   would merge code that was never tested.
-      # - Update-type metadata must be positively present and recognized.
-      #   Dependabot always writes `update-type:` trailers; their total
-      #   absence is a sign this isn't a PR this workflow understands, not
-      #   permission to merge it anyway.
+      # - The size of the bump must be positively known. Version updates carry
+      #   `update-type:` trailers. Security updates to indirect dependencies
+      #   carry none, so for those the single "from X to Y" pair in the title
+      #   is read instead. Anything that fits neither shape is held, not
+      #   merged on the assumption that it's small.
       #
       # This workflow never checks out or executes PR code: it only reads PR
       # metadata over the API and, if everything checks out, asks GitHub to
@@ -59,15 +60,21 @@ jobs:
           set -euo pipefail
 
           pr_json=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json \
-            author,baseRefName,headRefOid,isCrossRepository,commits)
+            author,baseRefName,headRefOid,isCrossRepository,commits,title)
 
           author=$(jq -r '.author.login' <<<"$pr_json")
+          author_is_bot=$(jq -r '.author.is_bot' <<<"$pr_json")
           base_ref=$(jq -r '.baseRefName' <<<"$pr_json")
           head_sha=$(jq -r '.headRefOid' <<<"$pr_json")
           is_cross_repo=$(jq -r '.isCrossRepository' <<<"$pr_json")
 
-          if [[ "$author" != "dependabot[bot]" ]]; then
-            echo "PR #$PR_NUMBER author is '$author', not dependabot[bot]. Refusing to merge."
+          # `gh pr view` names GitHub App authors as `app/<slug>`, so Dependabot
+          # is `app/dependabot` here, not the `dependabot[bot]` the REST API
+          # uses. Checking for `dependabot[bot]` silently refused every PR from
+          # 2026-09-07 until this fix. A slash can't appear in a user login, so
+          # no human account can match; `is_bot` is checked as well anyway.
+          if [[ "$author" != "app/dependabot" || "$author_is_bot" != "true" ]]; then
+            echo "PR #$PR_NUMBER author is '$author' (is_bot=$author_is_bot), not app/dependabot. Refusing to merge."
             exit 0
           fi
 
@@ -101,10 +108,25 @@ jobs:
           update_types=$(grep -o 'update-type: version-update:semver-[a-z]*' <<<"$messages" | sort -u || true)
 
           if [[ -z "$update_types" ]]; then
-            echo "PR #$PR_NUMBER has no recognized Dependabot update-type metadata. Refusing to merge without positive identification."
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
-              'Held for manual review: could not positively identify this as a recognized Dependabot update.'
-            exit 0
+            # Security updates to indirect dependencies (sharp, undici and
+            # js-yaml in #35-#37) have an `updated-dependencies:` trailer with
+            # no `update-type:` line, so fall back to the one version pair in
+            # the title, e.g. "Bump undici from 7.29.0 to 7.30.0".
+            title=$(jq -r '.title' <<<"$pr_json")
+            title_pattern='^Bump [^ ]+ from v?([0-9]+)\.[^ ]+ to v?([0-9]+)\.[^ ]+( in [^ ]+)?$'
+            if ! grep -q '^updated-dependencies:' <<<"$messages" \
+              || [[ ! "$title" =~ $title_pattern ]]; then
+              echo "PR #$PR_NUMBER has no update-type metadata and its title '$title' is not a single-package bump. Refusing to merge without positive identification."
+              gh pr comment "$PR_NUMBER" --repo "$REPO" --body \
+                'Held for manual review: could not positively identify the size of this Dependabot update.'
+              exit 0
+            fi
+            if [[ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[2]}" ]]; then
+              update_types='version-update:semver-major'
+            else
+              update_types='same major (read from title)'
+            fi
+            echo "PR #$PR_NUMBER: $update_types"
           fi
 
           if grep -q 'semver-major' <<<"$update_types"; then
