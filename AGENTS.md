@@ -10,7 +10,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Sermon Intelligence is a free web app for church media directors that analyzes sermon transcripts and generates YouTube metadata (titles, descriptions, chapter markers) and social media clip suggestions.
 
-- **Framework:** Next.js 16.3.2 + React 19 + TypeScript
+- **Framework:** Next.js 16 + React 19 + TypeScript (exact versions in `package.json`; Dependabot bumps them)
 - **Hosting:** Vercel (free hobby tier)
 - **Styling:** Tailwind CSS v4
 - **AI SDK:** Vercel AI SDK (`ai` ^7.x) with `@ai-sdk/google` provider
@@ -379,11 +379,10 @@ sermon-intelligence/
 │   ├── proxyRateLimit.test.ts         # Rate limit window, reset message, per-IP keying
 │   ├── systemPrompt.test.ts          # Prompt construction and timestamp rules
 │   └── transcriptFormats.test.ts     # Timestamp and caption formats
-├── public/                   # Static assets (SVGs, favicon)
+├── public/                   # Static assets: robots.txt, llms.txt, SVGs, favicon
 ├── proxy.ts                  # Next.js middleware (Next 16 convention): per-IP rate limiting
 ├── tsconfig.json
 ├── next.config.ts            # Security response headers
-├── tailwind.config.js
 ├── postcss.config.mjs
 ├── package.json
 ├── CLAUDE.md                 # Points to AGENTS.md
@@ -463,7 +462,7 @@ If app loads then returns to homepage with no errors:
 ## Contact & Support
 
 - **Creator:** Jake (Overflow Creative)
-- **Feedback:** [Tally Form](https://tally.so/r/wkJPlj)
+- **Feedback:** [Tally Form](https://tally.so/r/VL14Rg) (the form the app links to; `wkJPlj` is overflowcreative.net's contact form)
 - **Instagram:** [@jake.crtv](https://www.instagram.com/jake.crtv/)
 - **YouTube:** [@overflow.creative](https://www.youtube.com/@overflow.creative)
 

@@ -1,0 +1,18 @@
+# Sermon Intelligence
+
+Sermon Intelligence is a free web tool for church media teams. Paste or upload a sermon transcript and it returns YouTube title options, a publish-ready description, chapter markers with timestamps, and suggested social media clips with start and end times. It is built and run by Jake Hill (Overflow Creative), a church videographer and production director.
+
+- Site: https://www.sermonintelligence.com
+- Cost: free, no account needed
+- Input: a transcript as pasted text or an uploaded .txt, .srt, or .vtt file. Timestamps in the transcript make chapters and clip times more accurate.
+- Output: titles, description, chapters, and social clip suggestions, sized by a clip-length range the user picks.
+
+## Who made it
+
+- Jake Hill: https://overflowcreative.net/about
+- Church video training and the Better Church Video course: https://overflowcreative.net/betterchurchvideo
+- More free resources for church creatives: https://overflowcreative.net
+
+## AI usage policy
+
+Per robots.txt Content-Signal: training disallowed (`ai-train=no`), search engines allowed (`search=yes`), live AI browsing and answering allowed (`ai-input=yes`).
