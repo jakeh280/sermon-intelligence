@@ -466,6 +466,12 @@ If app loads then returns to homepage with no errors:
 - **Instagram:** [@jake.crtv](https://www.instagram.com/jake.crtv/)
 - **YouTube:** [@overflow.creative](https://www.youtube.com/@overflow.creative)
 
+## Dependabot
+
+- **Leave security updates ungrouped.** Grouped Dependabot titles carry no version pair, so `dependabot-auto-merge.yml` would hold every batch for a manual merge.
+- The auto-merge workflow refused every Dependabot PR from 2026-09-07 while showing green; fixed 2026-09-30 (#39). Open alerts: 0 as of 2026-09-30, dependencies current.
+- Held on purpose: ESLint 10 and TypeScript 7 (the native compiler needs its own session, not a bump).
+
 ---
 
 **Last Updated:** 2026-08-30
