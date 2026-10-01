@@ -476,3 +476,10 @@ If app loads then returns to homepage with no errors:
 
 **Last Updated:** 2026-08-30
 **Status:** Active maintenance, occasional feature additions
+
+## Dependency maintenance: 2026-10-01
+
+Jake authorized an in-range npm refresh. Next and its ESLint config are 16.3.8,
+AI SDK is 7.0.127, and the Google provider is 4.0.87. ESLint 10 and TypeScript 7
+remain held. Lint, all 112 tests, and the production build pass. Audit reports
+zero vulnerabilities. Jake authorized publishing these verified changes to main on 2026-10-01.
