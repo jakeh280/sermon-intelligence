@@ -13,7 +13,19 @@ export function Faq() {
               {q}
               <span aria-hidden className="text-zinc-500 transition-transform group-open:rotate-45">+</span>
             </summary>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-400">{a}</p>
+            <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+              {a.includes("overflowcreative.net") ? (
+                <>
+                  {a.replace("overflowcreative.net.", "")}
+                  <a href="https://overflowcreative.net" className="text-zinc-200 underline underline-offset-2 hover:text-white">
+                    overflowcreative.net
+                  </a>
+                  .
+                </>
+              ) : (
+                a
+              )}
+            </p>
           </details>
         ))}
       </div>
