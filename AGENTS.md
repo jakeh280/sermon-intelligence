@@ -483,3 +483,8 @@ Jake authorized an in-range npm refresh. Next and its ESLint config are 16.3.8,
 AI SDK is 7.0.127, and the Google provider is 4.0.87. ESLint 10 and TypeScript 7
 remain held. Lint, all 112 tests, and the production build pass. Audit reports
 zero vulnerabilities. Jake authorized publishing these verified changes to main on 2026-10-01.
+
+## Agent gotchas
+
+- **Worktrees need a real `npm ci`.** Symlinking `node_modules` from the main checkout passes `npm test` and `npm run lint`, but `npm run build` panics in Turbopack ("Symlink [project]/node_modules is invalid, it points out of the filesystem root").
+- **Vercel previews are login-protected.** Don't sign in. Call the Vercel MCP tool `get_access_to_vercel_url` with the preview URL to get a temporary `?_vercel_share=` link (about 23h). Find the preview URL with `gh pr view <n> --json comments`.
