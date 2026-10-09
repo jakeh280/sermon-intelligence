@@ -27,6 +27,7 @@ import {
   snapClipSec,
 } from "@/lib/clipRange";
 import { type HistoryItem } from "@/lib/history";
+import { Faq } from "@/components/Faq";
 import {
   clearStoredHistory,
   createHistoryId,
@@ -1869,6 +1870,7 @@ export default function Home() {
         </ModalFrame>
       )}
 
+      <Faq />
       <footer className="mt-auto border-t border-white/5 bg-black/40 px-6 py-12 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="space-y-4">
