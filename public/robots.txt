@@ -10,6 +10,7 @@ User-agent: CCBot
 User-agent: ClaudeBot
 User-agent: Applebot-Extended
 User-agent: meta-externalagent
+User-agent: Google-Extended
 Disallow: /
 
 # Retrieval and answer engines: allowed
@@ -18,7 +19,6 @@ User-agent: Claude-SearchBot
 User-agent: OAI-SearchBot
 User-agent: ChatGPT-User
 User-agent: PerplexityBot
-User-agent: Google-Extended
 Allow: /
 
 # The chat endpoint is not a page; keep it out of the index.
