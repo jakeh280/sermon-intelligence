@@ -37,10 +37,12 @@ No decision made yet; revisit if/when explored further.
 **Last Updated:** 2026-08-30
 **Status:** Active maintenance, occasional feature additions
 
-## Dependency maintenance: 2026-10-01
+## Dependency maintenance: 2026-10-13
 
-Jake authorized an in-range npm refresh. Next and its ESLint config are 16.3.8,
-AI SDK is 7.0.127, and the Google provider is 4.0.87. ESLint 10 and TypeScript 7
-remain held. Lint, all 112 tests, and the production build pass. Audit reports
-zero vulnerabilities. Jake authorized publishing these verified changes to main on 2026-10-01.
-
+Jake asked for security bumps and an in-range refresh. Next and its ESLint config
+16.4.0, AI SDK 7.0.139, Google provider 4.0.95, lucide-react 1.56.0. ESLint 10 and
+TypeScript 7 remain held. Lint, all 112 tests and the production build pass;
+`npm audit --omit=dev` reports zero. `braces` under `eslint-config-next` has no patched
+release (build-time only; the only fix npm offers is a downgrade to 14.x). The AI route
+was exercised end to end on the Vercel preview before merging, because the
+`.env.local` key on Jake's Mac is no longer valid and local runs return an empty 200.
