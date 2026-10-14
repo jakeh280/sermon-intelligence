@@ -45,6 +45,9 @@ TypeScript 7 remain held. Lint, all 112 tests and the production build pass;
 `npm audit --omit=dev` reports zero. `braces` under `eslint-config-next` has no patched
 release (build-time only; the only fix npm offers is a downgrade to 14.x). The AI route
 was exercised end to end on the Vercel preview before merging, and on production after.
-Jake has since cycled the Gemini key; the `.env.local` on his Mac still holds an old
-one, so a local run gets an empty 200 (the page shows its empty-output error) until the
-file is refreshed, for example with `vercel env pull .env.local`.
+The Mac's `.env.local` was refreshed from the existing Google AI Studio key on
+2026-10-13. Google's model metadata endpoint authenticated successfully and returned
+`models/gemini-3.5-flash-lite`; no generation was requested. The file is gitignored
+and owner-readable only. The connected Vercel project has protected Production and
+Preview keys, with no Development key, so `vercel env pull .env.local` cannot restore
+this local credential. Retrieve the existing key from Google AI Studio when needed.
