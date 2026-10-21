@@ -1,5 +1,7 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
+import { sharedRateLimit } from "@/lib/sharedRateLimit";
+import { getClientIp } from "@/lib/proxyRateLimit";
 import { readBoundedBody } from "@/lib/boundedBody";
 import { parseClipBounds } from "@/lib/clipRange";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
@@ -26,13 +28,8 @@ function jsonError(status: number, message: string): Response {
 }
 
 export async function POST(req: Request) {
-  // Rate limiting happens one layer up, in proxy.ts (Next's middleware
-  // convention as of Next 16 - the root `proxy.ts` file with a `proxy`
-  // export is auto-wired in, not a helper this route calls). It runs before
-  // this handler on every /api/chat request and uses a sliding window (see
-  // lib/proxyRateLimit.ts), so a second check here would add no coverage a
-  // fixed-window route-level check used to close - it would just duplicate
-  // the same guarantee proxy.ts already enforces.
+  // Proxy rejects bursts cheaply. The persistent admission check below runs only
+  // after valid input and before any billable provider call.
 
   // `await req.json()` would fully buffer, decode, and parse the entire body
   // before any size check could run, so a request large enough to matter
@@ -92,6 +89,18 @@ export async function POST(req: Request) {
       503,
       "The analysis service is not configured right now. Please try again later.",
     );
+  }
+
+  const admission = await sharedRateLimit(getClientIp(req.headers));
+  if (!admission.allowed) {
+    const minutes = Math.ceil(admission.retryAfter / 60);
+    const message = admission.status === 429
+      ? `Analysis limit reached. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`
+      : "Analysis is temporarily unavailable. Please try again in a minute.";
+    const response = jsonError(admission.status, message);
+    response.headers.set("Retry-After", String(admission.retryAfter));
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 
   // Real AI Analysis with gemini-3.5-flash-lite

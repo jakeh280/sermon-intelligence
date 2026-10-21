@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts workers/abuse-limiter/worker.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.57",

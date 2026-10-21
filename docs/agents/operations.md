@@ -63,11 +63,13 @@ that header. Tests cover both the proxied case and a forged header.
 `text/plain` POST skips the CORS preflight), provider error messages are logged but no
 longer returned to visitors, and `maxOutputTokens: 16000` caps a runaway generation.
 
-**Known limitation:** `ipStore` is an in-process `Map`, and Vercel serverless
-instances neither share memory nor persist across cold starts. So the limit is
-best effort: counts reset on a cold start and are tracked per instance, not
-globally. Fine at current spend. If abuse ever becomes real, this needs a shared
-store (Upstash Redis or Vercel KV), not a bigger number.
+**Persistent admission (2026-10-21):** The in-process proxy remains a cheap first filter, but the API route also obtains admission from `lib/sharedRateLimit.ts` after validating input and before contacting Gemini. A Cloudflare SQLite Durable Object serializes all decisions and persists them across application cold starts. Limits are 20 per address in a trailing hour, 50 sitewide per UTC day, and 500 sitewide per UTC calendar month. Preview deployments use a separate object, so testing cannot consume production's allowance. These are request ceilings, not a verified currency spending cap. A refused request returns 429 with Retry-After; counter failure returns 503 and makes no provider call.
+
+The limiter receives only an HMAC digest of the address, never the raw address, transcript, or generated output. Address digests expire after an hour; only active daily and monthly aggregate counts remain. Worker request logging is disabled. The Worker accepts only authenticated server POSTs; the shared secret is never exposed to browsers. Production and preview require the shared service configuration. Local development may omit it and retains the in-process proxy.
+
+Source lives in `workers/abuse-limiter/`. Deploy with existing Wrangler tooling, using its `wrangler.jsonc`. The SQLite-backed Durable Object is supported on Workers Free; free limits fail closed rather than generating overage charges. No paid plan was enabled. Server environment variables are `ABUSE_LIMITER_URL` (the matching `/consume/production` or `/consume/preview` HTTPS URL) and secret `ABUSE_LIMITER_SECRET`. The Worker secret is `LIMITER_SECRET`. Configure these before deploying the application. Tests: `npm test` plus `node --test workers/abuse-limiter/worker.test.mjs`.
+
+Provider-side quota and any historical $5 budget setting have not been independently verified. Budget alerts are not proof that billing stops at a dollar amount. The existing model and input/output caps remain in place.
 
 ---
 
