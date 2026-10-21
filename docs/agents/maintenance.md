@@ -34,7 +34,7 @@ No decision made yet; revisit if/when explored further.
 
 ---
 
-**Last Updated:** 2026-08-30
+**Last Updated:** 2026-10-20
 **Status:** Active maintenance, occasional feature additions
 
 ## Dependency maintenance: 2026-10-13
@@ -51,3 +51,18 @@ The Mac's `.env.local` was refreshed from the existing Google AI Studio key on
 and owner-readable only. The connected Vercel project has protected Production and
 Preview keys, with no Development key, so `vercel env pull .env.local` cannot restore
 this local credential. Retrieve the existing key from Google AI Studio when needed.
+
+## Dependency maintenance: 2026-10-20
+
+Jake requested a compatible dependency refresh and cleanup. Updated the lockfile
+within the existing package ranges: Next and its ESLint config 16.4.2, AI SDK
+7.0.148, Google provider 4.0.102, and lucide-react 1.60.0, plus compatible
+transitive dependencies. ESLint 10 and TypeScript 7 remain held. Dependabot
+continues to own routine updates; this refresh was explicitly requested.
+
+All 112 tests, lint, and the production build pass. The production dependency
+audit reports zero vulnerabilities. The full audit still reports five affected
+development packages from the existing braces advisory, with no available fix.
+No forced upgrades or dependency overrides were applied. The README now uses
+the lockfile install command, states the CI Node version, lists accepted upload
+formats, and includes validation commands. No live Gemini generation was run.
