@@ -32,9 +32,11 @@ export type HeaderReader = { get(name: string): string | null };
  * header could be forged, so the connecting address is used as before.
  */
 export function getClientIp(headers: HeaderReader): string {
+  // `||`, not `??`: an empty header yields "", which would otherwise become a
+  // bucket of its own and skip x-real-ip.
   const connecting =
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    headers.get("x-real-ip") ??
+    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    headers.get("x-real-ip")?.trim() ||
     null;
   const visitor = headers.get("cf-connecting-ip")?.trim();
   if (visitor && connecting && isCloudflareIp(connecting)) return visitor;

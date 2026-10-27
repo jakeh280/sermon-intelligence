@@ -25,6 +25,7 @@ import {
   MAX_TRANSCRIPT_CHARACTERS,
   TOO_LONG_MESSAGE,
 } from "../lib/transcriptInput.ts";
+import { normalizeTranscript } from "../lib/transcript.ts";
 
 function item(id: string, output = "Synthetic output"): HistoryItem {
   return {
@@ -230,6 +231,21 @@ test("blank and oversized transcripts are refused before the request", () => {
     null,
   );
   assert.equal(describeTranscriptProblem("Synthetic transcript.", "upload"), null);
+});
+
+test("caption files are measured after normalization, as the route measures them", () => {
+  const cues: string[] = [];
+  for (let i = 0; cues.join("\n").length <= MAX_TRANSCRIPT_CHARACTERS; i += 1) {
+    const seconds = String(i % 60).padStart(2, "0");
+    const minutes = String(Math.floor(i / 60) % 60).padStart(2, "0");
+    cues.push(
+      `${i + 1}\n00:${minutes}:${seconds},000 --> 00:${minutes}:${seconds},900\nAnd grace.\n`,
+    );
+  }
+  const srt = cues.join("\n");
+  assert.ok(srt.length > MAX_TRANSCRIPT_CHARACTERS);
+  assert.ok(normalizeTranscript(srt).length <= MAX_TRANSCRIPT_CHARACTERS);
+  assert.equal(describeTranscriptProblem(srt, "upload"), null);
 });
 
 test("uploads are decoded according to their byte order mark", () => {

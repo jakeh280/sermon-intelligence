@@ -23,6 +23,15 @@ test("client ip prefers x-forwarded-for, falls back to x-real-ip, then unknown",
   assert.equal(getClientIp(headers({})), "unknown");
 });
 
+test("an empty forwarded address falls through rather than becoming its own bucket", () => {
+  assert.equal(
+    getClientIp(headers({ "x-forwarded-for": "", "x-real-ip": "9.9.9.9" })),
+    "9.9.9.9",
+  );
+  assert.equal(getClientIp(headers({ "x-forwarded-for": " , 5.6.7.8" })), "unknown");
+  assert.equal(getClientIp(headers({ "x-forwarded-for": "" })), "unknown");
+});
+
 test("behind a Cloudflare edge, the visitor's own address is used", () => {
   assert.equal(
     getClientIp(

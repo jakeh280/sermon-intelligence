@@ -1,3 +1,5 @@
+import { normalizeTranscript } from "./transcript.ts";
+
 /** Kept in sync with the same limit enforced by `app/api/chat/route.ts`. */
 export const MAX_TRANSCRIPT_CHARACTERS = 150_000;
 
@@ -61,7 +63,10 @@ export function describeFileProblem(file: {
 /**
  * Returns a message to show the user, or null when the text can be sent. The
  * server checks the length too; checking here as well saves a round trip and
- * tells the user immediately.
+ * tells the user immediately. The length is measured after normalization, as
+ * the route measures it: an SRT or Premiere export shrinks a lot once its cue
+ * lines become short tags, so checking the raw text refused long caption files
+ * the server would have accepted.
  */
 export function describeTranscriptProblem(
   text: string,
@@ -72,7 +77,9 @@ export function describeTranscriptProblem(
       ? "Please paste a transcript before generating."
       : "That file has no readable text in it. Please upload a transcript with content.";
   }
-  if (text.length > MAX_TRANSCRIPT_CHARACTERS) return TOO_LONG_MESSAGE;
+  if (normalizeTranscript(text.trim()).length > MAX_TRANSCRIPT_CHARACTERS) {
+    return TOO_LONG_MESSAGE;
+  }
   return null;
 }
 

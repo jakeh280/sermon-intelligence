@@ -4,6 +4,7 @@ import {
   RATE_LIMIT_WINDOW_MS,
 } from "@/lib/rateLimitConfig";
 import { checkAndRecord, getClientIp } from "@/lib/proxyRateLimit";
+import { rateLimitMessage } from "@/lib/rateLimitMessage";
 
 const ipStore = new Map<string, number[]>();
 
@@ -26,14 +27,16 @@ export function proxy(req: NextRequest) {
   );
 
   if (result.limited) {
-    const { resetInMinutes } = result;
+    const retryAfter = result.resetInMinutes * 60;
     return new NextResponse(
-      JSON.stringify({
-        error: `Rate limit reached. Try again in ${resetInMinutes} minute${resetInMinutes !== 1 ? "s" : ""}.`,
-      }),
+      JSON.stringify({ error: rateLimitMessage(retryAfter) }),
       {
         status: 429,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": String(retryAfter),
+          "Cache-Control": "no-store",
+        },
       },
     );
   }

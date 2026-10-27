@@ -3,10 +3,12 @@
 import {
   Camera,
   Check,
+  Clock,
   CirclePlay,
   Copy,
   Eye,
   EyeOff,
+  FileUp,
   History,
   Info,
   Loader2,
@@ -102,9 +104,9 @@ function isGatewayTimeoutStatus(status: number) {
   return status === 504;
 }
 
-// `detail` carries the server's actual 429 body, from proxy.ts's rate
-// limiter (the only one in front of this route - it computes a real "try
-// again in N minutes" from its own window). The server's message is worth
+// `detail` carries the server's actual 429 body, from either proxy.ts's
+// in-process limiter or the route's persistent admission check. Both compute a
+// real "try again in ..." from their own window. The server's message is worth
 // showing when there is one, with AI_LIMIT_NOTICE only as the fallback for
 // a body that didn't parse.
 function aiLimitError(detail?: string): Error & { isAiLimit: true } {
@@ -124,6 +126,14 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
   );
 }
 
+// react-markdown hands every component its syntax tree node as a `node` prop.
+// Spread onto a DOM element, it renders as node="[object Object]".
+function withoutNode<T extends object>(props: T): Omit<T, "node"> {
+  const rest = { ...props } as T & { node?: unknown };
+  delete rest.node;
+  return rest;
+}
+
 const markdownComponents: NonNullable<
   ComponentProps<typeof ReactMarkdown>["components"]
 > = {
@@ -138,24 +148,24 @@ const markdownComponents: NonNullable<
   img: () => null,
   a: ({ href, children, ...props }) => (
     <a
+      {...withoutNode(props)}
       href={href}
       className="font-medium underline decoration-[#0B6ED0]/50 underline-offset-2 transition-colors hover:text-[#3B93E8]"
       target="_blank"
       rel="noopener noreferrer"
-      {...props}
     >
       {children}
     </a>
   ),
   p: ({ children, ...props }) => (
-    <p className="mb-3 text-base leading-7 text-zinc-300 last:mb-0" {...props}>
+    <p className="mb-3 text-base leading-7 text-zinc-300 last:mb-0" {...withoutNode(props)}>
       {children}
     </p>
   ),
   ul: ({ children, ...props }) => (
     <ul
       className="mb-3 list-disc space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
-      {...props}
+      {...withoutNode(props)}
     >
       {children}
     </ul>
@@ -163,50 +173,50 @@ const markdownComponents: NonNullable<
   ol: ({ children, ...props }) => (
     <ol
       className="mb-3 list-decimal space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
-      {...props}
+      {...withoutNode(props)}
     >
       {children}
     </ol>
   ),
   li: ({ children, ...props }) => (
-    <li className="leading-relaxed [&>p]:mb-0" {...props}>
+    <li className="leading-relaxed [&>p]:mb-0" {...withoutNode(props)}>
       {children}
     </li>
   ),
   strong: ({ children, ...props }) => (
-    <strong className="font-semibold text-zinc-100" {...props}>
+    <strong className="font-semibold text-zinc-100" {...withoutNode(props)}>
       {children}
     </strong>
   ),
   em: ({ children, ...props }) => (
-    <em className="text-zinc-200" {...props}>
+    <em className="text-zinc-200" {...withoutNode(props)}>
       {children}
     </em>
   ),
   h1: ({ children, ...props }) => (
-    <h4 className="mb-2 text-base font-semibold text-white" {...props}>
+    <h4 className="mb-2 text-base font-semibold text-white" {...withoutNode(props)}>
       {children}
     </h4>
   ),
   h2: ({ children, ...props }) => (
-    <h4 className="mb-2 text-base font-semibold text-white" {...props}>
+    <h4 className="mb-2 text-base font-semibold text-white" {...withoutNode(props)}>
       {children}
     </h4>
   ),
   h3: ({ children, ...props }) => (
-    <h4 className="mb-2 mt-4 text-sm font-semibold text-zinc-100 first:mt-0" {...props}>
+    <h4 className="mb-2 mt-4 text-sm font-semibold text-zinc-100 first:mt-0" {...withoutNode(props)}>
       {children}
     </h4>
   ),
   h4: ({ children, ...props }) => (
-    <h4 className="mb-2 text-sm font-semibold text-zinc-200" {...props}>
+    <h4 className="mb-2 text-sm font-semibold text-zinc-200" {...withoutNode(props)}>
       {children}
     </h4>
   ),
   blockquote: ({ children, ...props }) => (
     <blockquote
       className="mb-3 border-l-2 border-[#0B6ED0]/60 pl-3 text-base italic leading-7 text-zinc-400"
-      {...props}
+      {...withoutNode(props)}
     >
       {children}
     </blockquote>
@@ -218,14 +228,14 @@ const markdownComponents: NonNullable<
       return (
         <code
           className="rounded bg-zinc-800/90 px-1.5 py-0.5 font-mono text-[0.8125rem] text-[#7EB8F0]"
-          {...props}
+          {...withoutNode(props)}
         >
           {children}
         </code>
       );
     }
     return (
-      <code className={className} {...props}>
+      <code className={className} {...withoutNode(props)}>
         {children}
       </code>
     );
@@ -233,30 +243,30 @@ const markdownComponents: NonNullable<
   pre: ({ children, ...props }) => (
     <pre
       className="mb-3 overflow-x-auto rounded-lg border border-zinc-800 bg-black/40 p-3 text-xs text-zinc-300 last:mb-0"
-      {...props}
+      {...withoutNode(props)}
     >
       {children}
     </pre>
   ),
   table: ({ children, ...props }) => (
     <div className="mb-3 overflow-x-auto last:mb-0">
-      <table className="w-full border-collapse text-left text-sm text-zinc-300" {...props}>
+      <table className="w-full border-collapse text-left text-sm text-zinc-300" {...withoutNode(props)}>
         {children}
       </table>
     </div>
   ),
   thead: ({ children, ...props }) => (
-    <thead className="border-b border-zinc-700 bg-zinc-900/80" {...props}>
+    <thead className="border-b border-zinc-700 bg-zinc-900/80" {...withoutNode(props)}>
       {children}
     </thead>
   ),
   th: ({ children, ...props }) => (
-    <th className="px-3 py-2 font-semibold text-zinc-100" {...props}>
+    <th className="px-3 py-2 font-semibold text-zinc-100" {...withoutNode(props)}>
       {children}
     </th>
   ),
   td: ({ children, ...props }) => (
-    <td className="border-b border-zinc-800/80 px-3 py-2 align-top" {...props}>
+    <td className="border-b border-zinc-800/80 px-3 py-2 align-top" {...withoutNode(props)}>
       {children}
     </td>
   ),
@@ -264,20 +274,43 @@ const markdownComponents: NonNullable<
 
 /** Shared by every card's "Copy section" button - same clipboard write, same 2s "Copied" flash. */
 function useCopyToClipboard(text: string) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
   const handleCopy = async () => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopyState("copied");
     } catch (err) {
       console.error("Failed to copy", err);
+      setCopyState("failed");
     }
+    setTimeout(() => setCopyState("idle"), 2000);
   };
 
-  return { copied, handleCopy };
+  return { copyState, handleCopy };
+}
+
+function SectionCopyButton({ text }: { text: string }) {
+  const { copyState, handleCopy } = useCopyToClipboard(text);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+      title="Copy section"
+    >
+      {copyState === "copied" ? (
+        <Check className="size-3 text-emerald-400" aria-hidden />
+      ) : copyState === "failed" ? (
+        <X className="size-3 text-red-400" aria-hidden />
+      ) : (
+        <Copy className="size-3" aria-hidden />
+      )}
+      {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
+    </button>
+  );
 }
 
 function BentoCard({
@@ -291,8 +324,6 @@ function BentoCard({
   streaming: boolean;
   className?: string;
 }) {
-  const { copied, handleCopy } = useCopyToClipboard(body);
-
   return (
     <article
       className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-5 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className || ""}`}
@@ -310,20 +341,7 @@ function BentoCard({
           {streaming && !body && (
             <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
           )}
-          {body && !streaming && (
-            <button
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-              title="Copy section"
-            >
-              {copied ? (
-                <Check className="size-3 text-emerald-400" aria-hidden />
-              ) : (
-                <Copy className="size-3" aria-hidden />
-              )}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          )}
+          {body && !streaming && <SectionCopyButton text={body} />}
         </div>
       </header>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
@@ -353,22 +371,20 @@ function TitlesBentoCard({
   streaming: boolean;
   className?: string;
 }) {
-  const { copied, handleCopy } = useCopyToClipboard(body);
-
   const titleMarkdownComponents: NonNullable<ComponentProps<typeof ReactMarkdown>["components"]> = {
     ...markdownComponents,
     ol: ({ children, ...props }) => (
-      <ol className="flex flex-col md:flex-row gap-4 w-full list-none" {...props}>
+      <ol className="flex flex-col md:flex-row gap-4 w-full list-none" {...withoutNode(props)}>
         {children}
       </ol>
     ),
     ul: ({ children, ...props }) => (
-      <ul className="flex flex-col md:flex-row gap-4 w-full list-none" {...props}>
+      <ul className="flex flex-col md:flex-row gap-4 w-full list-none" {...withoutNode(props)}>
         {children}
       </ul>
     ),
     li: ({ children, ...props }) => (
-      <li className="flex-1 rounded-2xl bg-black/20 border border-white/5 p-4 text-center text-sm font-semibold text-white shadow-lg list-none flex items-center justify-center [&>p]:mb-0 [&>p]:flex-1" {...props}>
+      <li className="flex-1 rounded-2xl bg-black/20 border border-white/5 p-4 text-center text-sm font-semibold text-white shadow-lg list-none flex items-center justify-center [&>p]:mb-0 [&>p]:flex-1" {...withoutNode(props)}>
         {children}
       </li>
     ),
@@ -391,20 +407,7 @@ function TitlesBentoCard({
           {streaming && !body && (
             <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
           )}
-          {body && !streaming && (
-            <button
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-              title="Copy section"
-            >
-              {copied ? (
-                <Check className="size-3 text-emerald-400" aria-hidden />
-              ) : (
-                <Copy className="size-3" aria-hidden />
-              )}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          )}
+          {body && !streaming && <SectionCopyButton text={body} />}
         </div>
       </header>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300 w-full">
@@ -556,6 +559,7 @@ function ClipsBentoCard({
         {streaming && !body && (
           <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
         )}
+        {body && !streaming && <SectionCopyButton text={body} />}
       </header>
 
       {/* Gated on showClipGrid: when it's false, the fallback branch below
@@ -783,13 +787,20 @@ function HistoryModal({
   onDelete,
   onClear,
   onClose,
+  busy,
 }: {
   items: HistoryItem[];
   onSelect: (item: HistoryItem) => void;
   onDelete: (id: string) => void;
   onClear: () => void;
   onClose: () => void;
+  /** A generation is streaming; loading an entry now would be overwritten by it. */
+  busy: boolean;
 }) {
+  // Clearing can't be undone and the results live nowhere else, so it takes a
+  // second click. The dialog unmounts on close, which resets this.
+  const [confirmingClear, setConfirmingClear] = useState(false);
+
   return (
     <ModalFrame
       onClose={onClose}
@@ -813,6 +824,11 @@ function HistoryModal({
         </header>
 
         <div className="max-h-[60vh] overflow-y-auto p-2">
+          {busy && items.length > 0 && (
+            <p className="px-3 pb-2 pt-1 text-xs text-zinc-400">
+              A result is still being generated. Open a saved one once it finishes.
+            </p>
+          )}
           {items.length === 0 ? (
             <div className="py-12 text-center">
               <History className="size-10 text-zinc-800 mx-auto mb-3" />
@@ -828,7 +844,8 @@ function HistoryModal({
                   <button
                     type="button"
                     onClick={() => onSelect(item)}
-                    className="flex-1 min-w-0 cursor-pointer text-left"
+                    disabled={busy}
+                    className="flex-1 min-w-0 cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <p className="text-sm font-semibold text-white truncate group-hover:text-[#7EB8F0] transition-colors text-left">
                       {item.label}
@@ -840,7 +857,7 @@ function HistoryModal({
                   <button
                     type="button"
                     onClick={() => onDelete(item.id)}
-                    className="cursor-pointer rounded-lg p-2 opacity-0 transition-all hover:text-red-400 focus:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                    className="cursor-pointer rounded-lg p-2 transition-all hover:text-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus:opacity-100 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100"
                     aria-label={`Delete ${item.label} from history`}
                   >
                     <Trash2 className="size-4" aria-hidden />
@@ -855,10 +872,20 @@ function HistoryModal({
           <footer className="p-3 border-t border-white/5">
             <button
               type="button"
-              onClick={onClear}
+              onClick={() => {
+                if (confirmingClear) {
+                  setConfirmingClear(false);
+                  onClear();
+                } else {
+                  setConfirmingClear(true);
+                }
+              }}
+              onBlur={() => setConfirmingClear(false)}
               className="w-full py-2 text-xs font-bold text-red-500/80 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all cursor-pointer"
             >
-              Clear All History
+              {confirmingClear
+                ? `Click again to clear ${items.length === 1 ? "it" : `all ${items.length}`}`
+                : "Clear All History"}
             </button>
           </footer>
         )}
@@ -1219,7 +1246,6 @@ export default function Home() {
         if (!isCurrentRead()) return;
         setErrorMessage("Could not read that file.");
         if (statusRef.current !== "loading") setStatus("error");
-        setErrorMessage("Could not read that file.");
       };
       reader.readAsArrayBuffer(file);
     },
@@ -1389,8 +1415,9 @@ export default function Home() {
               <button
                 onClick={isDemo ? analyzeAnotherSermon : viewDemo}
                 aria-pressed={isDemo}
+                disabled={status === "loading"}
                 className={[
-                  "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer",
+                  "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
                   isDemo
                     ? "bg-[#0B6ED0] border border-[#0B6ED0] text-white shadow-lg shadow-indigo-500/20 hover:bg-[#3d8fe8]"
                     : "bg-[#0B6ED0]/10 border border-[#0B6ED0]/20 text-[#7DBEF7] hover:bg-[#0B6ED0]/20 hover:text-white",
@@ -1434,7 +1461,7 @@ export default function Home() {
               <Info className="size-5 text-[#5A9FE8]" aria-hidden />
             </div>
             <p className="text-base leading-7 text-zinc-400">
-              <span className="text-white font-semibold"></span> Only have audio or video? Use a tool like{" "}
+              Only have audio or video? Use a tool like{" "}
               <a
                 href="https://transcrisper.com/"
                 target="_blank"
@@ -1455,7 +1482,7 @@ export default function Home() {
               role="status"
             >
               <p className="text-sm font-semibold text-amber-200/90 flex items-center justify-center gap-2">
-                <Loader2 className="size-4 animate-spin" />
+                <Clock className="size-4 shrink-0" aria-hidden />
                 {limitNotice}
               </p>
             </div>
@@ -1531,7 +1558,7 @@ export default function Home() {
                     />
                     <div className="flex flex-col items-center">
                       <div className="mb-4 p-4 rounded-full bg-white/5 border border-white/5 group-hover:scale-110 transition-transform">
-                        <Camera className="size-8 text-[#0B6ED0]" />
+                        <FileUp className="size-8 text-[#0B6ED0]" aria-hidden />
                       </div>
                       <p className="text-lg font-bold text-white tracking-tight">
                         Drop your transcript here
@@ -1589,7 +1616,7 @@ export default function Home() {
                     <div className="text-center space-y-1">
                       <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
                       <p className="text-xs text-zinc-400 leading-relaxed">
-                        Smarter results • Handles any length transcript
+                        Smarter results • Handles transcripts up to about 2 hours
                       </p>
                       <p className="text-xs text-zinc-400 font-medium">
                         Limited free uses per hour
@@ -1600,7 +1627,10 @@ export default function Home() {
 
                 <div className="flex flex-col gap-4">
                   {status === "error" && errorMessage && (
-                    <div className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-4 text-center animate-in shake duration-500">
+                    <div
+                      className="rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-4 text-center animate-in shake duration-500"
+                      role="alert"
+                    >
                       <p className="text-sm font-bold text-red-200/90 flex items-center justify-center gap-2">
                         <X className="size-4" />
                         {errorMessage}
@@ -1807,6 +1837,7 @@ export default function Home() {
           onDelete={deleteHistoryItem}
           onClear={clearHistory}
           onClose={() => setShowHistory(false)}
+          busy={status === "loading"}
         />
       )}
 

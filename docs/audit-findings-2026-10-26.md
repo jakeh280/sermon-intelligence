@@ -14,12 +14,13 @@ bounded body read, the `cf-connecting-ip` trust rule, the HMAC'd limiter call an
 the `img: () => null` markdown override all hold up. `javascript:` links in model
 output are blanked by react-markdown's default URL filter (checked).
 
-Fixes in `lib/` are covered by `npm test`. Fixes that live only in `app/page.tsx`
-have no unit harness (no DOM in `node --test`), so they were checked with lint,
-the build, and a browser pass through View Demo and History. Generate was never
-clicked, so no Gemini call was made.
+Fixes in `lib/` and the Worker-drift check are covered by `npm test`. Fixes that
+live only in `app/page.tsx` (A3 to A11) have no unit harness (no DOM in
+`node --test`), so they were checked with lint, the typecheck and the build only.
+They have not been looked at in a browser; do a pass through View Demo and
+History before deploying. Generate was never clicked, so no Gemini call was made.
 
-### A1. A long caption file is refused before normalization shrinks it. medium. open
+### A1. A long caption file is refused before normalization shrinks it. medium. fixed, see git log
 
 `handleFiles` and `handleGenerate` checked the raw text against the 150,000
 character cap. The route checks the normalized text. Normalizing an SRT, VTT or
@@ -33,7 +34,7 @@ Done: `describeTranscriptProblem` measures `normalizeTranscript(text)` against
 the cap. The browser now refuses exactly what the route would refuse. Tested with
 an SRT that is over the cap raw and under it normalized.
 
-### A2. The sitewide limit says "Try again in 1440 minutes". medium. open
+### A2. The sitewide limit says "Try again in 1440 minutes". medium. fixed, see git log
 
 The Worker answers a daily or monthly sitewide refusal with a Retry-After of up
 to a day or a month. The route turned every Retry-After into minutes, so a
@@ -47,14 +48,14 @@ hours, then hours, then days. The route and `proxy.ts` both use it. Tested at
 The message still reads as a personal limit when the sitewide budget is what ran
 out; see A13.
 
-### A3. The rate-limit notice spins like something is loading. low. open
+### A3. The rate-limit notice spins like something is loading. low. fixed, see git log
 
 The amber limit notice drew `Loader2` with `animate-spin`, so a refusal looked
 like a request in progress.
 
 Done: a static clock icon.
 
-### A4. Every rendered markdown element carried `node="[object Object]"`. low. open
+### A4. Every rendered markdown element carried `node="[object Object]"`. low. fixed, see git log
 
 react-markdown passes its syntax tree node as a `node` prop. Each component in
 `markdownComponents` (and the Titles overrides) spread all props onto the DOM
@@ -66,29 +67,29 @@ installed react-markdown. In the `a` override the spread also came after
 Done: `node` is dropped before the spread, and the link's `target`/`rel` come
 last.
 
-### A5. Error messages are not announced to screen readers. low. open
+### A5. Error messages are not announced to screen readers. low. fixed, see git log
 
 The red error block under Generate had no live region, so a screen reader user
 pressing Generate with nothing loaded heard nothing.
 
 Done: `role="alert"` on the error block.
 
-### A6. History's delete button is invisible on phones. low. open
+### A6. History's delete button is invisible on phones. low. fixed, see git log
 
 The trash button was `opacity-0` until hover or focus. Touch screens have no
 hover, so the button was there but could not be seen.
 
 Done: the button is hidden until hover only on devices that can hover.
 
-### A7. Clear All History has no confirmation. medium. open
+### A7. Clear All History has no confirmation. medium. fixed, see git log
 
 One click on "Clear All History" deleted every saved result, with no undo. The
 results are not stored anywhere else.
 
-Done: the first click turns the button into "Click again to clear all 10"; a
+Done: the first click turns the button into "Click again to clear all 10" (or "it"); a
 second click clears it. The confirm state resets when the dialog closes.
 
-### A8. View Demo and History do nothing while a result streams. low. open
+### A8. View Demo and History do nothing while a result streams. low. fixed, see git log
 
 Both handlers return early during a generation (correctly, so the stream can't
 overwrite what they load), but the buttons stayed live, so a click did nothing
@@ -97,7 +98,7 @@ and the History dialog stayed open.
 Done: View Demo is disabled during a generation, and History's entries are
 disabled with a line saying a result is still being generated.
 
-### A9. "Handles any length transcript" contradicts the 150,000 character cap. low. open
+### A9. "Handles any length transcript" contradicts the 150,000 character cap. low. fixed, see git log
 
 The Cloud AI card said "Handles any length transcript", and the route refuses
 anything over 150,000 characters.
@@ -105,14 +106,14 @@ anything over 150,000 characters.
 Done: "Handles transcripts up to about 2 hours", the same estimate
 `TOO_LONG_MESSAGE` uses.
 
-### A10. The Clips card has no Copy button. low. open
+### A10. The Clips card has no Copy button. low. fixed, see git log
 
 Titles, Description and Chapters each have a Copy button. Clips, the card people
 most likely want to paste into an editor's notes, did not.
 
 Done: the Clips card has the same Copy button, copying the section's markdown.
 
-### A11. Small cleanups in `app/page.tsx`. low. open
+### A11. Small cleanups in `app/page.tsx`. low. fixed, see git log
 
 - The FileReader `onerror` set the same error message twice.
 - An empty `<span className="text-white font-semibold"></span>` sat at the start
@@ -124,7 +125,7 @@ Done: the Clips card has the same Copy button, copying the section's markdown.
 - Section Copy buttons failed silently. They now say "Copy failed" for two
   seconds.
 
-### A12. `proxy.ts` 429 had no Retry-After and an empty forwarded address made its own bucket. low. open
+### A12. `proxy.ts` 429 had no Retry-After and an empty forwarded address made its own bucket. low. fixed, see git log
 
 The in-process limiter's 429 had no `Retry-After` or `Cache-Control: no-store`,
 unlike the route's. Separately, `getClientIp` used `??` on the first
@@ -158,7 +159,7 @@ and the sitewide 50 per day. Refunding would need a second authenticated call to
 the Worker and would let a client that aborts early avoid the limit. Probably
 fine as is.
 
-### A16. Provider errors mid-stream logged without the route's tag. low. open
+### A16. Provider errors mid-stream logged without the route's tag. low. fixed, see git log
 
 `streamText` is lazy. A Gemini failure surfaces after the 200 has gone out, so
 the route's `catch` never sees it. The AI SDK's default `onError` logs it with a
@@ -168,7 +169,7 @@ uses, so a log search for that prefix missed these. The visitor already gets
 
 Done: an `onError` that logs with the `AI_ROUTE_ERROR` prefix.
 
-### A17. The Worker's limits can drift from `lib/rateLimitConfig.ts`. low. open
+### A17. The Worker's limits can drift from `lib/rateLimitConfig.ts`. low. fixed, see git log
 
 The Worker hardcodes 20 per address per hour, and `proxy.ts` reads the same
 numbers from `lib/rateLimitConfig.ts`. The Worker can't import the TypeScript

@@ -2,6 +2,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
 import { sharedRateLimit } from "@/lib/sharedRateLimit";
 import { getClientIp } from "@/lib/proxyRateLimit";
+import { rateLimitMessage } from "@/lib/rateLimitMessage";
 import { readBoundedBody } from "@/lib/boundedBody";
 import { parseClipBounds } from "@/lib/clipRange";
 import { buildSystemPrompt } from "@/lib/systemPrompt";
@@ -93,9 +94,8 @@ export async function POST(req: Request) {
 
   const admission = await sharedRateLimit(getClientIp(req.headers));
   if (!admission.allowed) {
-    const minutes = Math.ceil(admission.retryAfter / 60);
     const message = admission.status === 429
-      ? `Analysis limit reached. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`
+      ? rateLimitMessage(admission.retryAfter)
       : "Analysis is temporarily unavailable. Please try again in a minute.";
     const response = jsonError(admission.status, message);
     response.headers.set("Retry-After", String(admission.retryAfter));
@@ -126,6 +126,11 @@ export async function POST(req: Request) {
       // sermon are a few thousand tokens). It only stops a runaway generation
       // from looping until the 60s function timeout.
       maxOutputTokens: 16000,
+      // streamText is lazy, so a provider failure surfaces after the 200 has
+      // gone out and never reaches the catch below. Log it with the same tag.
+      onError: ({ error }) => {
+        console.error("AI_ROUTE_ERROR:", error);
+      },
     });
 
     return result.toTextStreamResponse();
