@@ -29,3 +29,7 @@ When you change something, update the matching doc, not this file.
 
 - **Worktrees need a real `npm ci`.** Symlinking `node_modules` from the main checkout passes `npm test` and `npm run lint`, but `npm run build` panics in Turbopack ("Symlink [project]/node_modules is invalid, it points out of the filesystem root").
 - **Vercel previews are login-protected.** Don't sign in. Call the Vercel MCP tool `get_access_to_vercel_url` with the preview URL to get a temporary `?_vercel_share=` link (about 23h). Find the preview URL with `gh pr view <n> --json comments`.
+
+## Open items
+
+Open technical items live in `docs/agents/operations.md` under "Open items". Add to that list; do not create new findings, audit or status docs. Old findings docs are in `docs/history/`.

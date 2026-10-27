@@ -130,3 +130,12 @@ TypeScript: ES2017 target, ESNext modules, strict mode, `@/*` path alias to proj
 
 ---
 
+
+## Open items
+
+From the 2026-10-26 audit (details in `docs/history/audit-findings-2026-10-26.md`). "Jake" marks a product call.
+
+- A13 (needs Worker redeploy): a sitewide refusal reads as a personal limit.
+- A14 (needs Worker redeploy): address digests can outlive the hour.
+- A15 (Jake): a failed generation still spends a limiter slot.
+- A20 (Jake): the Privacy panel does not mention rate limiting.
