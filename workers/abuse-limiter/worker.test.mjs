@@ -4,7 +4,10 @@ import { DatabaseSync } from 'node:sqlite';
 import worker, { RequestBudget } from './worker.mjs';
 function fixture() {
   const db = new DatabaseSync(':memory:');
+  const alarm = { at: null };
   const ctx = { storage: {
+    getAlarm: async () => alarm.at,
+    setAlarm: async at => { alarm.at = at; },
     sql: { exec(query, ...args) {
       const statement = db.prepare(query);
       if (/^SELECT/.test(query)) { const rows = statement.all(...args); return { toArray: () => rows }; }
@@ -18,13 +21,14 @@ function fixture() {
   } };
   const budget = new RequestBudget(ctx);
   const consume = async (ip = 'a'.repeat(64), instance = budget) => (await instance.fetch(new Request('https://internal', { method: 'POST', body: JSON.stringify({ ip }) }))).json();
-  return { db, ctx, budget, consume };
+  return { db, ctx, budget, consume, alarm };
 }
 test('per-address admission persists across instances and concurrent requests', async () => {
   const f = fixture();
   try {
     const decisions = await Promise.all(Array.from({ length: 25 }, () => f.consume()));
     assert.equal(decisions.filter(x => x.allowed).length, 20);
+    assert.ok(decisions.filter(x => !x.allowed).every(x => x.scope === 'address'));
     assert.equal((await f.consume('a'.repeat(64), new RequestBudget(f.ctx))).allowed, false);
     assert.equal((await f.consume('b'.repeat(64))).allowed, true);
     f.db.prepare('UPDATE hits SET at = ?').run(Date.now() - 3600001);
@@ -35,13 +39,35 @@ test('sitewide day and month ceilings cannot be bypassed with more addresses', a
   const f = fixture();
   try {
     for (let i = 0; i < 50; i++) assert.equal((await f.consume(i.toString(16).padStart(64, '0'))).allowed, true);
-    assert.equal((await f.consume('f'.repeat(64))).allowed, false);
+    assert.deepEqual(await f.consume('f'.repeat(64)).then(x => [x.allowed, x.scope]), [false, 'site']);
     const day = new Date().toISOString().slice(0, 10), month = day.slice(0, 7);
     f.db.prepare('UPDATE totals SET count = 0 WHERE bucket = ?').run(day);
     f.db.prepare('UPDATE totals SET count = 500 WHERE bucket = ?').run(month);
     assert.equal((await f.consume('e'.repeat(64))).allowed, false);
     f.db.prepare('DELETE FROM totals').run();
     assert.equal((await f.consume('e'.repeat(64))).allowed, true);
+  } finally { f.db.close(); }
+});
+test('an alarm deletes address digests an hour after they are written', async () => {
+  const f = fixture();
+  try {
+    const before = Date.now();
+    await f.consume('a'.repeat(64));
+    assert.ok(f.alarm.at >= before + 3600000 && f.alarm.at <= Date.now() + 3600000);
+    const firstAlarm = f.alarm.at;
+    await f.consume('b'.repeat(64));
+    assert.equal(f.alarm.at, firstAlarm, 'a pending alarm is not pushed back');
+    const now = Date.now();
+    f.db.prepare('UPDATE hits SET at = ? WHERE ip = ?').run(now - 3600001, 'a'.repeat(64));
+    f.db.prepare('UPDATE hits SET at = ? WHERE ip = ?').run(now - 600000, 'b'.repeat(64));
+    await f.budget.alarm();
+    assert.deepEqual(f.db.prepare('SELECT ip FROM hits').all().map(x => x.ip), ['b'.repeat(64)]);
+    assert.equal(f.alarm.at, now - 600000 + 3600000, 'rearmed for the next digest to expire');
+    f.alarm.at = null;
+    f.db.prepare('UPDATE hits SET at = ?').run(now - 3600001);
+    await f.budget.alarm();
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM hits').get().n, 0);
+    assert.equal(f.alarm.at, null, 'no alarm once nothing is left to expire');
   } finally { f.db.close(); }
 });
 test('worker refuses unauthenticated, oversized, invalid and unexpected requests', async () => {

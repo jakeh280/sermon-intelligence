@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   const admission = await sharedRateLimit(getClientIp(req.headers));
   if (!admission.allowed) {
     const message = admission.status === 429
-      ? rateLimitMessage(admission.retryAfter)
+      ? rateLimitMessage(admission.retryAfter, admission.scope)
       : "Analysis is temporarily unavailable. Please try again in a minute.";
     const response = jsonError(admission.status, message);
     response.headers.set("Retry-After", String(admission.retryAfter));

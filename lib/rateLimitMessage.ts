@@ -16,6 +16,9 @@ function plural(count: number, unit: string): string {
   return `${count} ${unit}${count === 1 ? "" : "s"}`;
 }
 
-export function rateLimitMessage(retryAfterSeconds: number): string {
-  return `Analysis limit reached. Try again in ${formatRetryAfter(retryAfterSeconds)}.`;
+export function rateLimitMessage(retryAfterSeconds: number, scope: "address" | "site" = "address"): string {
+  const wait = formatRetryAfter(retryAfterSeconds);
+  return scope === "site"
+    ? `The site has reached its analysis limit for everyone. Try again in ${wait}.`
+    : `Analysis limit reached. Try again in ${wait}.`;
 }

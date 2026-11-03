@@ -1,3 +1,5 @@
+const WINDOW_MS = 3600000;
+
 // One persistent object serializes admission across all application instances.
 export class RequestBudget {
   constructor(ctx) {
@@ -18,22 +20,32 @@ export class RequestBudget {
     const nextDay = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
     const nextMonth = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
     const result = this.storage.transactionSync(() => {
-      this.sql.exec('DELETE FROM hits WHERE at <= ?', now - 3600000);
+      this.sql.exec('DELETE FROM hits WHERE at <= ?', now - WINDOW_MS);
       // Retain only the active day and month, including after a long idle period.
       this.sql.exec('DELETE FROM totals WHERE bucket NOT IN (?, ?)', day, month);
       const count = key => this.sql.exec('SELECT count FROM totals WHERE bucket = ?', key).toArray()[0]?.count || 0;
-      const retry = reset => ({ allowed: false, retryAfter: Math.max(1, Math.ceil((reset - now) / 1000)) });
-      if (count(month) >= 500) return retry(nextMonth);
-      if (count(day) >= 50) return retry(nextDay);
+      // scope tells the route whether the visitor or the whole site is out of allowance.
+      const retry = (reset, scope) => ({ allowed: false, scope, retryAfter: Math.max(1, Math.ceil((reset - now) / 1000)) });
+      if (count(month) >= 500) return retry(nextMonth, 'site');
+      if (count(day) >= 50) return retry(nextDay, 'site');
       const hits = this.sql.exec('SELECT at FROM hits WHERE ip = ? ORDER BY at', ip).toArray();
-      if (hits.length >= 20) return retry(hits[0].at + 3600000);
+      if (hits.length >= 20) return retry(hits[0].at + WINDOW_MS, 'address');
       this.sql.exec('INSERT INTO hits (ip, at) VALUES (?, ?)', ip, now);
       for (const bucket of [day, month]) {
         this.sql.exec('INSERT INTO totals (bucket, count) VALUES (?, 1) ON CONFLICT(bucket) DO UPDATE SET count = count + 1', bucket);
       }
       return { allowed: true };
     });
+    // Digests expire on the hour even if no further request arrives.
+    if (result.allowed && await this.storage.getAlarm() === null) await this.storage.setAlarm(now + WINDOW_MS);
     return Response.json(result, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  async alarm() {
+    const now = Date.now();
+    this.sql.exec('DELETE FROM hits WHERE at <= ?', now - WINDOW_MS);
+    const oldest = this.sql.exec('SELECT MIN(at) AS at FROM hits').toArray()[0]?.at;
+    if (oldest != null) await this.storage.setAlarm(Math.max(now + 1000, oldest + WINDOW_MS));
   }
 }
 

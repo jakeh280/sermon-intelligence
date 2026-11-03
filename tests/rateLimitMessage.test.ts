@@ -28,6 +28,14 @@ test("the message reads as a sentence", () => {
   assert.equal(rateLimitMessage(86_400), "Analysis limit reached. Try again in 24 hours.");
 });
 
+test("a sitewide limit says it applies to everyone", () => {
+  assert.equal(rateLimitMessage(600, "address"), "Analysis limit reached. Try again in 10 minutes.");
+  assert.equal(
+    rateLimitMessage(86_400, "site"),
+    "The site has reached its analysis limit for everyone. Try again in 24 hours.",
+  );
+});
+
 test("the Worker's per-address limit matches lib/rateLimitConfig.ts", () => {
   // The Worker can't import the TypeScript config, so this keeps the two copies
   // from drifting apart.

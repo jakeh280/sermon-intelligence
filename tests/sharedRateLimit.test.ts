@@ -15,7 +15,7 @@ test("shared admission hashes addresses and sends no transcript", async () => {
   assert.deepEqual(result, { allowed: true });
 });
 test("shared limits preserve reset time and failures never admit a provider call", async () => {
-  assert.deepEqual(await sharedRateLimit("test", settings, async () => Response.json({ allowed: false, retryAfter: 601 })), { allowed: false, status: 429, retryAfter: 601 });
+  assert.deepEqual(await sharedRateLimit("test", settings, async () => Response.json({ allowed: false, retryAfter: 601 })), { allowed: false, status: 429, retryAfter: 601, scope: "address" });
   for (const response of [() => Response.json({}), () => Response.json({ allowed: false, retryAfter: -1 }), () => Response.json({ allowed: "true" }), () => new Response("unavailable", { status: 503 }), () => { throw Error("timeout"); }]) {
     assert.deepEqual(await sharedRateLimit("test", settings, async () => response()), { allowed: false, status: 503, retryAfter: 60 });
   }
@@ -24,4 +24,10 @@ test("shared limits preserve reset time and failures never admit a provider call
   let contacted = false;
   await sharedRateLimit("test", { ...settings, url: "http://insecure.example" }, async () => { contacted = true; return Response.json({ allowed: true }); });
   assert.equal(contacted, false);
+});
+test("a sitewide refusal is told apart from a per-address one", async () => {
+  const answer = (body: object) => sharedRateLimit("test", settings, async () => Response.json(body));
+  assert.deepEqual(await answer({ allowed: false, retryAfter: 600, scope: "address" }), { allowed: false, status: 429, retryAfter: 600, scope: "address" });
+  assert.deepEqual(await answer({ allowed: false, retryAfter: 86_400, scope: "site" }), { allowed: false, status: 429, retryAfter: 86_400, scope: "site" });
+  assert.deepEqual(await answer({ allowed: false, retryAfter: 600, scope: "unexpected" }), { allowed: false, status: 429, retryAfter: 600, scope: "address" });
 });

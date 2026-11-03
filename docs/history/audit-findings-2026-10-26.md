@@ -135,14 +135,14 @@ unlike the route's. Separately, `getClientIp` used `??` on the first
 Done: the proxy's 429 carries both headers and the shared message, and an empty
 forwarded address falls through to `x-real-ip`, then `"unknown"`. Both tested.
 
-### A13. A sitewide refusal reads as a personal limit. low. left for Jake: needs a Worker redeploy
+### A13. A sitewide refusal reads as a personal limit. low. code done 2026-11-03, needs a Worker redeploy
 
 The Worker answers `{ allowed: false, retryAfter }` for all three limits. The
 route can't tell "you sent 20 this hour" from "the site used its 50 for today",
 so both say "Analysis limit reached". Telling them apart means adding a `scope`
 field to the Worker's answer and redeploying it, which this pass doesn't do.
 
-### A14. Address digests can outlive the hour. low. left for Jake: needs a Worker redeploy
+### A14. Address digests can outlive the hour. low. code done 2026-11-03, needs a Worker redeploy
 
 The Worker deletes `hits` rows over an hour old only inside `fetch`, on the next
 admission request. After a quiet stretch the last hour's digests stay in the

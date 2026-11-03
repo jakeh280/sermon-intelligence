@@ -1,6 +1,10 @@
 import { createHmac } from "node:crypto";
 
-type Result = { allowed: true } | { allowed: false; status: 429 | 503; retryAfter: number };
+export type LimitScope = "address" | "site";
+type Result =
+  | { allowed: true }
+  | { allowed: false; status: 429; retryAfter: number; scope: LimitScope }
+  | { allowed: false; status: 503; retryAfter: number };
 
 export async function sharedRateLimit(
   ip: string,
@@ -32,7 +36,9 @@ export async function sharedRateLimit(
     if (result.allowed === true) return { allowed: true };
     if (result.allowed === false && "retryAfter" in result && typeof result.retryAfter === "number" &&
         Number.isFinite(result.retryAfter) && result.retryAfter > 0) {
-      return { allowed: false, status: 429, retryAfter: Math.ceil(result.retryAfter) };
+      // A Worker deployed before the scope field existed only ever meant this address.
+      const scope: LimitScope = "scope" in result && result.scope === "site" ? "site" : "address";
+      return { allowed: false, status: 429, retryAfter: Math.ceil(result.retryAfter), scope };
     }
     throw Error("Invalid limiter response");
   } catch {
