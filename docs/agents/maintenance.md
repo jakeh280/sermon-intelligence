@@ -66,3 +66,9 @@ development packages from the existing braces advisory, with no available fix.
 No forced upgrades or dependency overrides were applied. The README now uses
 the lockfile install command, states the CI Node version, lists accepted upload
 formats, and includes validation commands. No live Gemini generation was run.
+
+## Audit note: 2026-11-03
+
+The full audit no longer lists `braces`. Its only advisory is `minimatch`
+(GHSA-g3hv-75wg-m249, below 11.0.1) under ESLint and `eslint-config-next`.
+Its only patched line is minimatch 11, and the packages that pull it in (ESLint 9 and its plugins, or the Sanity CLI tooling) need the 3.x API, so an override would break them; every fix npm offers is a major downgrade. It is a development-time denial of service only. No override was applied. `npm audit --omit=dev` reports zero.
