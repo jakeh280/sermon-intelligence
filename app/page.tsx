@@ -1523,6 +1523,23 @@ export default function Home() {
 
               {inputMode === "upload" ? (
                 <div className="relative group">
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept=".txt,.srt,.vtt,text/plain"
+                    // Beside the drop zone rather than inside it: the zone is the control
+                    // (it opens this picker on click, Enter and Space), and a focusable
+                    // input inside a role=button was a second, invisible tab stop that
+                    // screen readers could still reach (axe nested-interactive).
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files;
+                      if (f?.length) handleFiles(f);
+                      e.target.value = "";
+                    }}
+                  />
                   <div
                     role="button"
                     tabIndex={0}
@@ -1544,18 +1561,6 @@ export default function Home() {
                         : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.08]",
                     ].join(" ")}
                   >
-                    <input
-                      ref={inputRef}
-                      type="file"
-                      accept=".txt,.srt,.vtt,text/plain"
-                      aria-label="Upload a sermon transcript, .txt, .srt, or .vtt"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const f = e.target.files;
-                        if (f?.length) handleFiles(f);
-                        e.target.value = "";
-                      }}
-                    />
                     <div className="flex flex-col items-center">
                       <div className="mb-4 p-4 rounded-full bg-white/5 border border-white/5 group-hover:scale-110 transition-transform">
                         <FileUp className="size-8 text-[#0B6ED0]" aria-hidden />
