@@ -17,10 +17,10 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import type { ComponentProps, CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import dynamic from "next/dynamic";
+import type { Components } from "react-markdown";
 import {
   CLIP_CEIL_SEC,
   CLIP_FLOOR_SEC,
@@ -126,6 +126,11 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
   );
 }
 
+// Loaded on demand; see components/Markdown.tsx. The page prefetches it once idle,
+// so output (streamed, restored from history, or the demo) never waits on it.
+const loadMarkdown = () => import("@/components/Markdown");
+const Markdown = dynamic(loadMarkdown);
+
 // react-markdown hands every component its syntax tree node as a `node` prop.
 // Spread onto a DOM element, it renders as node="[object Object]".
 function withoutNode<T extends object>(props: T): Omit<T, "node"> {
@@ -134,15 +139,13 @@ function withoutNode<T extends object>(props: T): Omit<T, "node"> {
   return rest;
 }
 
-const markdownComponents: NonNullable<
-  ComponentProps<typeof ReactMarkdown>["components"]
-> = {
+const markdownComponents: Components = {
   // Images aren't part of the output contract - the prompt never asks for
   // them - so a URL that ends up in the model's response (from the source
   // transcript or an injected instruction) must not become a live <img> tag.
   // A rendered image is an automatic, unclickable request to whatever host
   // that URL names, and any text baked into the URL travels with it. Every
-  // ReactMarkdown instance in this file uses this component map (directly, or
+  // Markdown instance in this file uses this component map (directly, or
   // by spreading it, as TitlesBentoCard does), so this one override covers
   // every rendering site, including restored history.
   img: () => null,
@@ -346,9 +349,9 @@ function BentoCard({
       </header>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
         {body ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          <Markdown components={markdownComponents}>
             {body}
-          </ReactMarkdown>
+          </Markdown>
         ) : streaming ? (
           <div className="space-y-2">
             <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
@@ -371,7 +374,7 @@ function TitlesBentoCard({
   streaming: boolean;
   className?: string;
 }) {
-  const titleMarkdownComponents: NonNullable<ComponentProps<typeof ReactMarkdown>["components"]> = {
+  const titleMarkdownComponents: Components = {
     ...markdownComponents,
     ol: ({ children, ...props }) => (
       <ol className="flex flex-col md:flex-row gap-4 w-full list-none" {...withoutNode(props)}>
@@ -412,9 +415,9 @@ function TitlesBentoCard({
       </header>
       <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300 w-full">
         {body ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={titleMarkdownComponents}>
+          <Markdown components={titleMarkdownComponents}>
             {body}
-          </ReactMarkdown>
+          </Markdown>
         ) : streaming ? (
           <div className="flex flex-col md:flex-row gap-4 w-full">
             <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
@@ -619,12 +622,9 @@ function ClipsBentoCard({
       ) : (
         <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
           {body ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={markdownComponents}
-            >
+            <Markdown components={markdownComponents}>
               {body}
-            </ReactMarkdown>
+            </Markdown>
           ) : streaming ? (
             <div className="flex flex-col gap-2">
               <div className="h-4 w-full animate-pulse rounded bg-white/5" />
@@ -1330,6 +1330,16 @@ export default function Home() {
   // normal generate or a history load. Deliberately not "smooth": the
   // button lives far from the results, and an instant jump is the more
   // reliable way to make sure the click visibly did something.
+  // Off the critical path, but ready before anyone can produce output.
+  useEffect(() => {
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(() => void loadMarkdown());
+      return () => cancelIdleCallback(id);
+    }
+    const timer = setTimeout(() => void loadMarkdown(), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     if (isDemo) {
       strategyOutputRef.current?.scrollIntoView({ block: "start" });
