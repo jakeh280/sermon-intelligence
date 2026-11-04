@@ -1877,6 +1877,9 @@ export default function Home() {
                 <span className="font-semibold text-zinc-300">Local history</span> keeps up to 10 generated results in this browser only. You can remove them at any time from History.
               </li>
               <li>
+                <span className="font-semibold text-zinc-300">Usage limits</span> count each analysis request against per-visitor and sitewide limits to prevent abuse. The limiter on Cloudflare receives only a keyed hash of your IP address, never the address itself, your transcript or the results.
+              </li>
+              <li>
                 <span className="font-semibold text-zinc-300">Aggregate analytics</span> uses Vercel Web Analytics and Cloudflare Web Analytics to understand page traffic and performance. These analytics tools do not use session recordings, and the app does not send transcript text or generated content to either analytics tool. See{" "}
                 <a
                   href="https://vercel.com/docs/analytics/privacy-policy"

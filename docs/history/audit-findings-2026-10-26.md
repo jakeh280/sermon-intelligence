@@ -189,7 +189,7 @@ per address, so this only affects the sender. Left alone.
 There is an `app/error.tsx` but no `app/global-error.tsx`. The layout is static
 metadata, fonts and Analytics, with little that can throw. Not worth a file.
 
-### A20. The Privacy panel does not mention rate limiting. low. left for Jake: disclosure wording
+### A20. The Privacy panel does not mention rate limiting. low. fixed 2026-11-03 (Jake gave full authority): a Usage limits line that stays true before and after the A14 Worker deploy
 
 The panel covers Gemini, local history and analytics, but not that each
 analysis request's address is checked by an in-memory limiter and, as a keyed
