@@ -1,4 +1,7 @@
 const WINDOW_MS = 3600000;
+// Generous ceilings against many-address abuse; Google billing limits are the spending backstop.
+export const DAY_LIMIT = 2000;
+export const MONTH_LIMIT = 20000;
 
 // One persistent object serializes admission across all application instances.
 export class RequestBudget {
@@ -26,8 +29,8 @@ export class RequestBudget {
       const count = key => this.sql.exec('SELECT count FROM totals WHERE bucket = ?', key).toArray()[0]?.count || 0;
       // scope tells the route whether the visitor or the whole site is out of allowance.
       const retry = (reset, scope) => ({ allowed: false, scope, retryAfter: Math.max(1, Math.ceil((reset - now) / 1000)) });
-      if (count(month) >= 500) return retry(nextMonth, 'site');
-      if (count(day) >= 50) return retry(nextDay, 'site');
+      if (count(month) >= MONTH_LIMIT) return retry(nextMonth, 'site');
+      if (count(day) >= DAY_LIMIT) return retry(nextDay, 'site');
       const hits = this.sql.exec('SELECT at FROM hits WHERE ip = ? ORDER BY at', ip).toArray();
       if (hits.length >= 20) return retry(hits[0].at + WINDOW_MS, 'address');
       this.sql.exec('INSERT INTO hits (ip, at) VALUES (?, ?)', ip, now);

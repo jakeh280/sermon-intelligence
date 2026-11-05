@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import worker, { RequestBudget } from './worker.mjs';
+import worker, { RequestBudget, DAY_LIMIT, MONTH_LIMIT } from './worker.mjs';
 function fixture() {
   const db = new DatabaseSync(':memory:');
   const alarm = { at: null };
@@ -38,11 +38,11 @@ test('per-address admission persists across instances and concurrent requests', 
 test('sitewide day and month ceilings cannot be bypassed with more addresses', async () => {
   const f = fixture();
   try {
-    for (let i = 0; i < 50; i++) assert.equal((await f.consume(i.toString(16).padStart(64, '0'))).allowed, true);
+    for (let i = 0; i < DAY_LIMIT; i++) assert.equal((await f.consume(i.toString(16).padStart(64, '0'))).allowed, true);
     assert.deepEqual(await f.consume('f'.repeat(64)).then(x => [x.allowed, x.scope]), [false, 'site']);
     const day = new Date().toISOString().slice(0, 10), month = day.slice(0, 7);
     f.db.prepare('UPDATE totals SET count = 0 WHERE bucket = ?').run(day);
-    f.db.prepare('UPDATE totals SET count = 500 WHERE bucket = ?').run(month);
+    f.db.prepare('UPDATE totals SET count = ? WHERE bucket = ?').run(MONTH_LIMIT, month);
     assert.equal((await f.consume('e'.repeat(64))).allowed, false);
     f.db.prepare('DELETE FROM totals').run();
     assert.equal((await f.consume('e'.repeat(64))).allowed, true);
