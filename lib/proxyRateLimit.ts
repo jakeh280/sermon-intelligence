@@ -16,7 +16,7 @@
  * would have quietly loosened the real guarantee.
  */
 
-import { isCloudflareIp } from "./cloudflareIps.ts";
+import { ipv6Network64, isCloudflareIp } from "./cloudflareIps.ts";
 
 /** The slice of `Headers` this module needs, so tests can supply a plain object. */
 export type HeaderReader = { get(name: string): string | null };
@@ -30,6 +30,10 @@ export type HeaderReader = { get(name: string): string | null };
  * address is a real Cloudflare edge, `cf-connecting-ip` carries the visitor's
  * own address; otherwise (direct hits on the Vercel origin, local dev) that
  * header could be forged, so the connecting address is used as before.
+ *
+ * An IPv6 address is reduced to its /64: one subscriber holds the whole /64
+ * and can send each request from a different address in it, which otherwise
+ * gave every request its own fresh allowance here and in the shared limiter.
  */
 export function getClientIp(headers: HeaderReader): string {
   // `||`, not `??`: an empty header yields "", which would otherwise become a
@@ -39,8 +43,10 @@ export function getClientIp(headers: HeaderReader): string {
     headers.get("x-real-ip")?.trim() ||
     null;
   const visitor = headers.get("cf-connecting-ip")?.trim();
-  if (visitor && connecting && isCloudflareIp(connecting)) return visitor;
-  return connecting ?? "unknown";
+  const address =
+    visitor && connecting && isCloudflareIp(connecting) ? visitor : connecting;
+  if (!address) return "unknown";
+  return ipv6Network64(address) ?? address;
 }
 
 function prune(timestamps: number[], now: number, windowMs: number): number[] {

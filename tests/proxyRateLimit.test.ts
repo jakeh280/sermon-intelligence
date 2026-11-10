@@ -52,6 +52,38 @@ test("a forged cf-connecting-ip on a direct (non-Cloudflare) request is ignored"
   assert.equal(getClientIp(headers({ "cf-connecting-ip": "203.0.113.7" })), "unknown");
 });
 
+test("rotating through one IPv6 /64 does not hand out a fresh allowance per address", () => {
+  // An IPv6 subscriber is delegated at least a whole /64 and can pick any of
+  // its 2^64 addresses per request, so the address alone is not one visitor.
+  const store = new Map<string, number[]>();
+  let admitted = 0;
+  for (let i = 0; i < MAX_REQUESTS + 5; i += 1) {
+    const ip = getClientIp(
+      headers({
+        "x-forwarded-for": "172.68.10.20",
+        "cf-connecting-ip": `2001:db8:12:34:aaaa:bbbb:cccc:${i.toString(16)}`,
+      }),
+    );
+    if (!checkAndRecord(store, ip, 1_000 + i, WINDOW_MS, MAX_REQUESTS).limited) {
+      admitted += 1;
+    }
+  }
+  assert.equal(admitted, MAX_REQUESTS);
+
+  // The same holds on a direct (non-Cloudflare) connection, and however the
+  // address happens to be written.
+  assert.equal(
+    getClientIp(headers({ "x-forwarded-for": "2001:db8:12:34::1" })),
+    getClientIp(headers({ "x-forwarded-for": "2001:0DB8:0012:0034:ffff:ffff:ffff:ffff" })),
+  );
+  // A neighbouring /64 is a different subscriber, and IPv4 is untouched.
+  assert.notEqual(
+    getClientIp(headers({ "x-forwarded-for": "2001:db8:12:34::1" })),
+    getClientIp(headers({ "x-forwarded-for": "2001:db8:12:35::1" })),
+  );
+  assert.equal(getClientIp(headers({ "x-forwarded-for": "198.51.100.9" })), "198.51.100.9");
+});
+
 test("requests under the limit are allowed and counted", () => {
   const store = new Map<string, number[]>();
   const now = Date.now();

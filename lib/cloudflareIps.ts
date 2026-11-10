@@ -70,3 +70,16 @@ export function isCloudflareIp(ip: string): boolean {
   if (v6 !== null) return V6.some((cidr) => inV6(v6, cidr));
   return false;
 }
+
+/**
+ * The /64 an IPv6 address belongs to, written one way however the address
+ * itself was spelled, or null for anything that is not a plain IPv6 address.
+ * An IPv6 subscriber is delegated at least a whole /64 and can use any address
+ * in it, so the /64 is the smallest thing that stands for one visitor.
+ */
+export function ipv6Network64(ip: string): string | null {
+  const address = v6ToBigInt(ip);
+  if (address === null) return null;
+  const network = (address >> BigInt(64)).toString(16).padStart(16, "0");
+  return `${network.match(/.{4}/g)!.join(":")}::/64`;
+}

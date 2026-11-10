@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isCloudflareIp } from "../lib/cloudflareIps.ts";
+import { ipv6Network64, isCloudflareIp } from "../lib/cloudflareIps.ts";
 
 test("recognizes Cloudflare edge addresses, IPv4 and IPv6", () => {
   assert.equal(isCloudflareIp("172.68.10.20"), true); // 172.64.0.0/13
@@ -21,4 +21,14 @@ test("rejects everything else, including malformed input", () => {
   assert.equal(isCloudflareIp("unknown"), false);
   assert.equal(isCloudflareIp("999.1.1.1"), false);
   assert.equal(isCloudflareIp(""), false);
+});
+
+test("an IPv6 address reduces to its /64, and nothing else is touched", () => {
+  assert.equal(ipv6Network64("2001:db8:12:34:aaaa:bbbb:cccc:dddd"), "2001:0db8:0012:0034::/64");
+  assert.equal(ipv6Network64("2001:DB8:12:34::1"), "2001:0db8:0012:0034::/64");
+  assert.equal(ipv6Network64("::1"), "0000:0000:0000:0000::/64");
+  assert.equal(ipv6Network64("203.0.113.7"), null);
+  assert.equal(ipv6Network64("::ffff:203.0.113.7"), null);
+  assert.equal(ipv6Network64("unknown"), null);
+  assert.equal(ipv6Network64(""), null);
 });

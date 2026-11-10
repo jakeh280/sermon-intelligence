@@ -59,6 +59,15 @@ the connecting address is inside Cloudflare's published ranges
 (`lib/cloudflareIps.ts`), because anyone calling the Vercel origin directly can send
 that header. Tests cover both the proxied case and a forged header.
 
+**IPv6 is limited per /64 (2026-11-10):** `getClientIp` reduces an IPv6 address to
+its /64 (`ipv6Network64` in `lib/cloudflareIps.ts`) before either limiter sees it.
+One IPv6 subscriber holds a whole /64 and can send every request from a different
+address in it, so keying on the full address gave each request a fresh 20-per-hour
+allowance and left only the sitewide ceilings in the way. A subscriber with a
+larger delegation (a /56 is 256 of these) still gets one allowance per /64; the
+sitewide ceilings remain the bound for that and for any many-address abuse. IPv4
+is unchanged. No Worker change: it only ever receives a digest of this value.
+
 **Also on the route (same date):** non-JSON requests get a 415 (a cross-site
 `text/plain` POST skips the CORS preflight), provider error messages are logged but no
 longer returned to visitors, and `maxOutputTokens: 16000` caps a runaway generation.
