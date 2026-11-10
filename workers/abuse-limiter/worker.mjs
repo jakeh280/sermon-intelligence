@@ -1,4 +1,6 @@
-const WINDOW_MS = 3600000;
+export const WINDOW_MS = 3600000;
+// Per address within WINDOW_MS, matching RATE_LIMIT_MAX_REQUESTS in lib/rateLimitConfig.ts.
+export const ADDRESS_LIMIT = 20;
 // Generous ceilings against many-address abuse; Google billing limits are the spending backstop.
 export const DAY_LIMIT = 2000;
 export const MONTH_LIMIT = 20000;
@@ -32,7 +34,7 @@ export class RequestBudget {
       if (count(month) >= MONTH_LIMIT) return retry(nextMonth, 'site');
       if (count(day) >= DAY_LIMIT) return retry(nextDay, 'site');
       const hits = this.sql.exec('SELECT at FROM hits WHERE ip = ? ORDER BY at', ip).toArray();
-      if (hits.length >= 20) return retry(hits[0].at + WINDOW_MS, 'address');
+      if (hits.length >= ADDRESS_LIMIT) return retry(hits[0].at + WINDOW_MS, 'address');
       this.sql.exec('INSERT INTO hits (ip, at) VALUES (?, ?)', ip, now);
       for (const bucket of [day, month]) {
         this.sql.exec('INSERT INTO totals (bucket, count) VALUES (?, 1) ON CONFLICT(bucket) DO UPDATE SET count = count + 1', bucket);

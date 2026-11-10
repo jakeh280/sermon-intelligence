@@ -11,7 +11,7 @@
  * lib/systemPrompt.ts (one dropped leading word and one clip's timestamp
  * were off by a few seconds; both corrected here) before being frozen as a
  * static asset. The three Titles lines also needed a leading "- " added:
- * TitlesBentoCard's three-across card layout in app/page.tsx only fires on
+ * TitlesBentoCard's three-across card layout in components/OutputCards.tsx only fires on
  * an actual markdown list, and the raw response used bare lines. Treat edits
  * to it with the same scrutiny: any wording change must still be a word for
  * word match against the source transcript, and check the rendered page

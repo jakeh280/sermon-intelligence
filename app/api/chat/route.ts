@@ -32,11 +32,6 @@ export async function POST(req: Request) {
   // Proxy rejects bursts cheaply. The persistent admission check below runs only
   // after valid input and before any billable provider call.
 
-  // `await req.json()` would fully buffer, decode, and parse the entire body
-  // before any size check could run, so a request large enough to matter
-  // pays that full cost regardless of what happens next. This bounds the
-  // read itself, refusing as soon as either the declared Content-Length or
-  // the actual bytes read cross the cap.
   // The app always posts JSON. A cross-site form or text/plain POST skips the
   // CORS preflight entirely, so without this check another page could make a
   // visitor's browser spend Gemini calls against this route.
@@ -44,6 +39,11 @@ export async function POST(req: Request) {
     return jsonError(415, "Expected a JSON request body.");
   }
 
+  // `await req.json()` would fully buffer, decode, and parse the entire body
+  // before any size check could run, so a request large enough to matter
+  // pays that full cost regardless of what happens next. This bounds the
+  // read itself, refusing as soon as either the declared Content-Length or
+  // the actual bytes read cross the cap.
   const bounded = await readBoundedBody(
     req.body,
     req.headers.get("content-length"),

@@ -1,6 +1,6 @@
 import { normalizeTranscript } from "./transcript.ts";
 
-/** Kept in sync with the same limit enforced by `app/api/chat/route.ts`. */
+/** Enforced on both sides: here before sending, and by `app/api/chat/route.ts`. */
 export const MAX_TRANSCRIPT_CHARACTERS = 150_000;
 
 /**
@@ -19,8 +19,7 @@ export const MAX_TRANSCRIPT_BYTES = 5 * 1024 * 1024;
  * with a check on `req.json()`'s already-parsed result.
  *
  * Deliberately kept below Next.js's own ~10MB body-size cap (it truncates
- * and warns rather than rejecting - see the route's comment), not equal to
- * or above it: this check has to actually run before that limit silently
+ * and warns rather than rejecting), not equal to or above it: this check has to actually run before that limit silently
  * truncates the body out from under it.
  */
 export const MAX_REQUEST_BODY_BYTES = MAX_TRANSCRIPT_BYTES + 1024 * 1024;
@@ -29,8 +28,9 @@ export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 
 export const ACCEPTED_EXTENSIONS_LABEL = ".txt, .srt, or .vtt";
 
-export const TOO_LONG_MESSAGE =
-  "Transcript is too long. Please trim it to under 150,000 characters (approximately 2 hours of speech).";
+export const TOO_LONG_MESSAGE = `Transcript is too long. Please trim it to under ${MAX_TRANSCRIPT_CHARACTERS.toLocaleString(
+  "en-US",
+)} characters (approximately 2 hours of speech).`;
 
 export function extension(name: string): string {
   const index = name.lastIndexOf(".");
