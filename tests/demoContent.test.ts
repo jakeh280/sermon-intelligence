@@ -46,7 +46,7 @@ test("the demo has an attribution label and a real church link", () => {
 });
 
 test("the demo's Titles section is a real markdown list, not bare lines", () => {
-  // TitlesBentoCard's three-across card layout (app/page.tsx) only fires when
+  // TitlesBentoCard's three-across card layout (components/OutputCards.tsx) only fires when
   // remark actually parses the body as a list. A caught regression: the first
   // frozen draft had bare "Option 1: ..." lines with no leading "- ", which
   // rendered as a single paragraph instead of three styled cards. Confirmed

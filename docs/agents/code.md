@@ -5,7 +5,7 @@
 ```
 sermon-intelligence/
 ├── app/
-│   ├── page.tsx              # Main UI, orchestration, and bento cards
+│   ├── page.tsx              # Main UI: input, generation state, output layout
 │   ├── layout.tsx            # RootLayout, metadata
 │   ├── globals.css           # Tailwind imports, CSS variables
 │   ├── error.tsx             # Friendly route error recovery
@@ -13,6 +13,16 @@ sermon-intelligence/
 │   └── api/
 │       └── chat/
 │           └── route.ts      # Server endpoint, Gemini API streaming
+├── components/
+│   ├── ClipRangeSlider.tsx   # Two-thumb clip duration slider
+│   ├── Faq.tsx               # FAQ section below the tool
+│   ├── HistoryModal.tsx      # Saved results dialog
+│   ├── Markdown.tsx          # react-markdown + remark-gfm, loaded on demand
+│   ├── markdownComponents.tsx # Markdown element overrides (drops images)
+│   ├── ModalFrame.tsx        # Dialog shell: focus trap, Escape, scroll lock
+│   ├── OutputCards.tsx       # Bento grid and the section, titles, clips cards
+│   ├── PrivacyDialog.tsx     # Privacy panel content
+│   └── SiteFooter.tsx        # Footer links and the Privacy button
 ├── lib/
 │   ├── boundedBody.ts        # Reads a request body without exceeding a byte cap
 │   ├── clipRange.ts          # Clip range constants, snapping, and labels
@@ -26,6 +36,7 @@ sermon-intelligence/
 │   ├── rateLimitConfig.ts    # rate limit window and request count, read by proxy.ts
 │   ├── site.ts               # canonical site metadata and structured data
 │   ├── systemPrompt.ts       # buildSystemPrompt(min, max) function
+│   ├── theme.ts              # Brand accent colour and its contrast rule
 │   ├── transcript.ts         # Premiere, SRT, and WebVTT normalization
 │   └── transcriptInput.ts    # Accepted formats, limits, encoding
 ├── tests/
@@ -64,7 +75,7 @@ sermon-intelligence/
 - Props interfaces defined inline for small components
 
 ### Markdown Rendering
-React-Markdown with custom component overrides:
+React-Markdown with custom component overrides (`components/markdownComponents.tsx`):
 - Links open in new tab with underline
 - Headings reduced to `<h4>` for hierarchy
 - Code blocks and blockquotes styled with Tailwind
@@ -96,8 +107,8 @@ If app loads then returns to homepage with no errors:
 
 ### Add a New AI Feature
 1. Update `lib/systemPrompt.ts`
-2. Modify output parsing in `app/page.tsx` if format changes
-3. Add a new card type if special rendering is needed
+2. Modify output parsing in `lib/outputParsing.ts` if format changes
+3. Add a new card type in `components/OutputCards.tsx` if special rendering is needed
 
 ### Update System Prompt
 1. Edit `lib/systemPrompt.ts`
@@ -106,14 +117,14 @@ If app loads then returns to homepage with no errors:
 
 ### Add a New Input Format
 1. Update `ACCEPTED_EXTENSIONS` in `lib/transcriptInput.ts`
-2. Update the `accept` attribute and the supported formats hint in `app/page.tsx`
+2. Update the supported formats hint in `app/page.tsx` (the file picker's `accept` attribute is derived from `ACCEPTED_EXTENSIONS`)
 3. Add normalization to `lib/transcript.ts`, keeping it all or nothing
 4. Cover it in `tests/transcriptFormats.test.ts` with synthetic fixtures only
 
 ### Modify Clip Validation
 1. Change `CLIP_FLOOR_SEC`, `CLIP_CEIL_SEC`, `CLIP_STEP`
 2. Update `snapClipSec()`
-3. Update slider UI range attributes
+3. The slider in `components/ClipRangeSlider.tsx` reads these constants, so it needs no edit
 4. Update system prompt clip duration bounds
 
 ---

@@ -133,8 +133,9 @@ function parseClipOptions(body: string): { preamble: string; clips: ParsedClip[]
 
 ### Bento Cards
 
-The result cards still live in `app/page.tsx`. Pure parsing, clip range rules,
-and history decoding no longer belong in that component. Card types:
+The result cards live in `components/OutputCards.tsx`, which also picks the card
+for each parsed section (`OutputSections`). All three share one `CardShell`
+frame (heading, "Typing…" hint, copy button). Card types:
 1. **BentoCard** — Standard Markdown content with copy button
 2. **TitlesBentoCard** — Renders 3 title options as horizontal cards
 3. **ClipsBentoCard** — Parses and displays 3 clip options in grid layout
@@ -149,6 +150,8 @@ The full-output copy action appends a single attribution line linking to
 `https://sermonintelligence.com/`. Individual section copies remain unmodified.
 Completed results also include an "Analyze Another Sermon" action that clears
 the current inputs and output, then returns the user to the top of the page.
+While a generation streams, that button reads "Cancel" instead: it aborts the
+request and returns to the input screen with the transcript still loaded.
 
 ---
 

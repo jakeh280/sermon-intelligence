@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -7,6 +6,7 @@ import {
   RATE_LIMIT_WINDOW_MS,
 } from "../lib/rateLimitConfig.ts";
 import { formatRetryAfter, rateLimitMessage } from "../lib/rateLimitMessage.ts";
+import { ADDRESS_LIMIT, WINDOW_MS } from "../workers/abuse-limiter/worker.mjs";
 
 test("short waits are said in minutes, rounded up", () => {
   assert.equal(formatRetryAfter(1), "1 minute");
@@ -39,12 +39,6 @@ test("a sitewide limit says it applies to everyone", () => {
 test("the Worker's per-address limit matches lib/rateLimitConfig.ts", () => {
   // The Worker can't import the TypeScript config, so this keeps the two copies
   // from drifting apart.
-  const source = readFileSync(
-    new URL("../workers/abuse-limiter/worker.mjs", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, new RegExp(`hits\\.length >= ${RATE_LIMIT_MAX_REQUESTS}\\)`));
-  const windows = source.match(/\b\d{7,}\b/g) ?? [];
-  assert.ok(windows.length > 0);
-  for (const value of windows) assert.equal(Number(value), RATE_LIMIT_WINDOW_MS);
+  assert.equal(ADDRESS_LIMIT, RATE_LIMIT_MAX_REQUESTS);
+  assert.equal(WINDOW_MS, RATE_LIMIT_WINDOW_MS);
 });

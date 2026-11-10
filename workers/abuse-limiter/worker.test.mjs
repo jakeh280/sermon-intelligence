@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import worker, { RequestBudget, DAY_LIMIT, MONTH_LIMIT } from './worker.mjs';
+import worker, { RequestBudget, ADDRESS_LIMIT, DAY_LIMIT, MONTH_LIMIT } from './worker.mjs';
 function fixture() {
   const db = new DatabaseSync(':memory:');
   const alarm = { at: null };
@@ -27,7 +27,7 @@ test('per-address admission persists across instances and concurrent requests', 
   const f = fixture();
   try {
     const decisions = await Promise.all(Array.from({ length: 25 }, () => f.consume()));
-    assert.equal(decisions.filter(x => x.allowed).length, 20);
+    assert.equal(decisions.filter(x => x.allowed).length, ADDRESS_LIMIT);
     assert.ok(decisions.filter(x => !x.allowed).every(x => x.scope === 'address'));
     assert.equal((await f.consume('a'.repeat(64), new RequestBudget(f.ctx))).allowed, false);
     assert.equal((await f.consume('b'.repeat(64))).allowed, true);

@@ -1,10 +1,8 @@
 "use client";
 
 import {
-  Camera,
   Check,
   Clock,
-  CirclePlay,
   Copy,
   Eye,
   EyeOff,
@@ -12,24 +10,18 @@ import {
   History,
   Info,
   Loader2,
-  Trash2,
   TriangleAlert,
   X,
 } from "lucide-react";
-import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import dynamic from "next/dynamic";
-import type { Components } from "react-markdown";
-import {
-  CLIP_CEIL_SEC,
-  CLIP_FLOOR_SEC,
-  CLIP_STEP,
-  formatDurationSec,
-  snapClipSec,
-} from "@/lib/clipRange";
+import { snapClipSec } from "@/lib/clipRange";
 import { type HistoryItem } from "@/lib/history";
+import { DualClipRangeSlider } from "@/components/ClipRangeSlider";
 import { Faq } from "@/components/Faq";
+import { HistoryModal } from "@/components/HistoryModal";
+import { loadMarkdown, OutputSections } from "@/components/OutputCards";
+import { PrivacyDialog } from "@/components/PrivacyDialog";
+import { SiteFooter } from "@/components/SiteFooter";
 import {
   clearStoredHistory,
   createHistoryId,
@@ -37,12 +29,7 @@ import {
   readHistory,
   writeHistory,
 } from "@/lib/historyStorage";
-import {
-  isClipsSectionTitle,
-  isTitlesSectionTitle,
-  parseBentoSections,
-  parseClipOptions,
-} from "@/lib/outputParsing";
+import { parseBentoSections } from "@/lib/outputParsing";
 import { describeOutputIssues, type OutputIssue } from "@/lib/outputHealth";
 import {
   describeRequestFailure,
@@ -52,34 +39,13 @@ import {
 import { hasTimestampTags, normalizeTranscript } from "@/lib/transcript";
 import { DEMO_ATTRIBUTION, DEMO_LABEL, DEMO_OUTPUT } from "@/lib/demoContent";
 import {
+  ACCEPTED_EXTENSIONS,
   ACCEPTED_EXTENSIONS_LABEL,
   decodeTranscriptBytes,
   describeFileProblem,
   describeTranscriptProblem,
 } from "@/lib/transcriptInput";
 
-// lucide-react dropped brand/logo icons (Github, Twitter, etc.) from its
-// exports, so the GitHub mark is inlined here instead of imported.
-function GithubIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.333-1.755-1.333-1.755-1.089-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.762-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-    </svg>
-  );
-}
-
-// Brand accent, used for FILLS (buttons, slider thumb, glows) where white text
-// sits on top and contrast already passes comfortably.
-const ACCENT = "#0B6ED0";
-// For accent-coloured TEXT on the dark background, use #3B93E8 instead. ACCENT
-// as text measures 3.79:1, under the WCAG 4.5:1 minimum; #3B93E8 measures 5.96:1.
-// It appears as a literal in Tailwind classes rather than a constant, because
-// arbitrary values have to be statically visible to the Tailwind compiler.
 const COMMUNITY_DISCLAIMER =
   "Sermon Intelligence is a free community tool. During times of high demand, processing may be temporarily limited to keep it free for everyone.";
 
@@ -123,773 +89,6 @@ function isAiLimitError(e: unknown): e is Error & { isAiLimit: true } {
     e !== null &&
     "isAiLimit" in e &&
     (e as { isAiLimit?: boolean }).isAiLimit === true
-  );
-}
-
-// Loaded on demand; see components/Markdown.tsx. The page prefetches it once idle,
-// so output (streamed, restored from history, or the demo) never waits on it.
-const loadMarkdown = () => import("@/components/Markdown");
-const Markdown = dynamic(loadMarkdown);
-
-// react-markdown hands every component its syntax tree node as a `node` prop.
-// Spread onto a DOM element, it renders as node="[object Object]".
-function withoutNode<T extends object>(props: T): Omit<T, "node"> {
-  const rest = { ...props } as T & { node?: unknown };
-  delete rest.node;
-  return rest;
-}
-
-const markdownComponents: Components = {
-  // Images aren't part of the output contract - the prompt never asks for
-  // them - so a URL that ends up in the model's response (from the source
-  // transcript or an injected instruction) must not become a live <img> tag.
-  // A rendered image is an automatic, unclickable request to whatever host
-  // that URL names, and any text baked into the URL travels with it. Every
-  // Markdown instance in this file uses this component map (directly, or
-  // by spreading it, as TitlesBentoCard does), so this one override covers
-  // every rendering site, including restored history.
-  img: () => null,
-  a: ({ href, children, ...props }) => (
-    <a
-      {...withoutNode(props)}
-      href={href}
-      className="font-medium underline decoration-[#0B6ED0]/50 underline-offset-2 transition-colors hover:text-[#3B93E8]"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  ),
-  p: ({ children, ...props }) => (
-    <p className="mb-3 text-base leading-7 text-zinc-300 last:mb-0" {...withoutNode(props)}>
-      {children}
-    </p>
-  ),
-  ul: ({ children, ...props }) => (
-    <ul
-      className="mb-3 list-disc space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
-      {...withoutNode(props)}
-    >
-      {children}
-    </ul>
-  ),
-  ol: ({ children, ...props }) => (
-    <ol
-      className="mb-3 list-decimal space-y-1.5 pl-5 text-base leading-7 text-zinc-300 last:mb-0"
-      {...withoutNode(props)}
-    >
-      {children}
-    </ol>
-  ),
-  li: ({ children, ...props }) => (
-    <li className="leading-relaxed [&>p]:mb-0" {...withoutNode(props)}>
-      {children}
-    </li>
-  ),
-  strong: ({ children, ...props }) => (
-    <strong className="font-semibold text-zinc-100" {...withoutNode(props)}>
-      {children}
-    </strong>
-  ),
-  em: ({ children, ...props }) => (
-    <em className="text-zinc-200" {...withoutNode(props)}>
-      {children}
-    </em>
-  ),
-  h1: ({ children, ...props }) => (
-    <h4 className="mb-2 text-base font-semibold text-white" {...withoutNode(props)}>
-      {children}
-    </h4>
-  ),
-  h2: ({ children, ...props }) => (
-    <h4 className="mb-2 text-base font-semibold text-white" {...withoutNode(props)}>
-      {children}
-    </h4>
-  ),
-  h3: ({ children, ...props }) => (
-    <h4 className="mb-2 mt-4 text-sm font-semibold text-zinc-100 first:mt-0" {...withoutNode(props)}>
-      {children}
-    </h4>
-  ),
-  h4: ({ children, ...props }) => (
-    <h4 className="mb-2 text-sm font-semibold text-zinc-200" {...withoutNode(props)}>
-      {children}
-    </h4>
-  ),
-  blockquote: ({ children, ...props }) => (
-    <blockquote
-      className="mb-3 border-l-2 border-[#0B6ED0]/60 pl-3 text-base italic leading-7 text-zinc-400"
-      {...withoutNode(props)}
-    >
-      {children}
-    </blockquote>
-  ),
-  hr: () => <hr className="my-4 border-zinc-700/80" />,
-  code: ({ className, children, ...props }) => {
-    const inline = !className;
-    if (inline) {
-      return (
-        <code
-          className="rounded bg-zinc-800/90 px-1.5 py-0.5 font-mono text-[0.8125rem] text-[#7EB8F0]"
-          {...withoutNode(props)}
-        >
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code className={className} {...withoutNode(props)}>
-        {children}
-      </code>
-    );
-  },
-  pre: ({ children, ...props }) => (
-    <pre
-      className="mb-3 overflow-x-auto rounded-lg border border-zinc-800 bg-black/40 p-3 text-xs text-zinc-300 last:mb-0"
-      {...withoutNode(props)}
-    >
-      {children}
-    </pre>
-  ),
-  table: ({ children, ...props }) => (
-    <div className="mb-3 overflow-x-auto last:mb-0">
-      <table className="w-full border-collapse text-left text-sm text-zinc-300" {...withoutNode(props)}>
-        {children}
-      </table>
-    </div>
-  ),
-  thead: ({ children, ...props }) => (
-    <thead className="border-b border-zinc-700 bg-zinc-900/80" {...withoutNode(props)}>
-      {children}
-    </thead>
-  ),
-  th: ({ children, ...props }) => (
-    <th className="px-3 py-2 font-semibold text-zinc-100" {...withoutNode(props)}>
-      {children}
-    </th>
-  ),
-  td: ({ children, ...props }) => (
-    <td className="border-b border-zinc-800/80 px-3 py-2 align-top" {...withoutNode(props)}>
-      {children}
-    </td>
-  ),
-};
-
-/** Shared by every card's "Copy section" button - same clipboard write, same 2s "Copied" flash. */
-function useCopyToClipboard(text: string) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-
-  const handleCopy = async () => {
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopyState("copied");
-    } catch (err) {
-      console.error("Failed to copy", err);
-      setCopyState("failed");
-    }
-    setTimeout(() => setCopyState("idle"), 2000);
-  };
-
-  return { copyState, handleCopy };
-}
-
-function SectionCopyButton({ text }: { text: string }) {
-  const { copyState, handleCopy } = useCopyToClipboard(text);
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-      title="Copy section"
-    >
-      {copyState === "copied" ? (
-        <Check className="size-3 text-emerald-400" aria-hidden />
-      ) : copyState === "failed" ? (
-        <X className="size-3 text-red-400" aria-hidden />
-      ) : (
-        <Copy className="size-3" aria-hidden />
-      )}
-      {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
-    </button>
-  );
-}
-
-function BentoCard({
-  title,
-  body,
-  streaming,
-  className,
-}: {
-  title: string;
-  body: string;
-  streaming: boolean;
-  className?: string;
-}) {
-  return (
-    <article
-      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-5 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className || ""}`}
-    >
-      <header className="mb-3 flex items-start justify-between gap-3 border-b border-white/5 pb-3">
-        <h2 className="text-sm font-semibold tracking-tight text-white/90">
-          <span
-            className="mr-2 inline-block h-2 w-2 shrink-0 rounded-full align-middle shadow-[0_0_8px_rgba(11,110,208,0.5)]"
-            style={{ backgroundColor: ACCENT }}
-            aria-hidden
-          />
-          {title}
-        </h2>
-        <div className="flex items-center gap-3">
-          {streaming && !body && (
-            <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
-          )}
-          {body && !streaming && <SectionCopyButton text={body} />}
-        </div>
-      </header>
-      <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
-        {body ? (
-          <Markdown components={markdownComponents}>
-            {body}
-          </Markdown>
-        ) : streaming ? (
-          <div className="space-y-2">
-            <div className="h-4 w-3/4 animate-pulse rounded bg-white/5" />
-            <div className="h-4 w-1/2 animate-pulse rounded bg-white/5" />
-          </div>
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
-function TitlesBentoCard({
-  title,
-  body,
-  streaming,
-  className,
-}: {
-  title: string;
-  body: string;
-  streaming: boolean;
-  className?: string;
-}) {
-  const titleMarkdownComponents: Components = {
-    ...markdownComponents,
-    ol: ({ children, ...props }) => (
-      <ol className="flex flex-col md:flex-row gap-4 w-full list-none" {...withoutNode(props)}>
-        {children}
-      </ol>
-    ),
-    ul: ({ children, ...props }) => (
-      <ul className="flex flex-col md:flex-row gap-4 w-full list-none" {...withoutNode(props)}>
-        {children}
-      </ul>
-    ),
-    li: ({ children, ...props }) => (
-      <li className="flex-1 rounded-2xl bg-black/20 border border-white/5 p-4 text-center text-sm font-semibold text-white shadow-lg list-none flex items-center justify-center [&>p]:mb-0 [&>p]:flex-1" {...withoutNode(props)}>
-        {children}
-      </li>
-    ),
-  };
-
-  return (
-    <article
-      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 hover:shadow-indigo-500/5 animate-in fade-in slide-in-from-bottom-2 duration-500 ${className || ""}`}
-    >
-      <header className="mb-4 flex items-start justify-between gap-3 border-b border-white/5 pb-4">
-        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white/95 sm:text-2xl">
-          <span
-            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_rgba(11,110,208,0.6)]"
-            style={{ backgroundColor: ACCENT }}
-            aria-hidden
-          />
-          {title}
-        </h2>
-        <div className="flex items-center gap-3">
-          {streaming && !body && (
-            <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
-          )}
-          {body && !streaming && <SectionCopyButton text={body} />}
-        </div>
-      </header>
-      <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300 w-full">
-        {body ? (
-          <Markdown components={titleMarkdownComponents}>
-            {body}
-          </Markdown>
-        ) : streaming ? (
-          <div className="flex flex-col md:flex-row gap-4 w-full">
-            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
-            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
-            <div className="h-20 flex-1 animate-pulse rounded-2xl bg-white/5" />
-          </div>
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
-function DualClipRangeSlider({
-  clipMinSec,
-  clipMaxSec,
-  onMinChange,
-  onMaxChange,
-}: {
-  clipMinSec: number;
-  clipMaxSec: number;
-  onMinChange: (v: number) => void;
-  onMaxChange: (v: number) => void;
-}) {
-  const [activeThumb, setActiveThumb] = useState<"min" | "max" | null>(null);
-  const span = CLIP_CEIL_SEC - CLIP_FLOOR_SEC;
-  const minPct = ((clipMinSec - CLIP_FLOOR_SEC) / span) * 100;
-  const maxPct = ((clipMaxSec - CLIP_FLOOR_SEC) / span) * 100;
-
-  const rangeThumbTw =
-    "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-zinc-950 [&::-webkit-slider-thumb]:bg-[#0B6ED0] [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:active:cursor-grabbing [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-zinc-950 [&::-moz-range-thumb]:bg-[#0B6ED0] [&::-moz-range-thumb]:shadow-md";
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 text-sm text-zinc-300">
-        <span className="font-medium tabular-nums text-[#7EB8F0]">
-          {formatDurationSec(clipMinSec)}
-        </span>
-        <span className="text-xs uppercase tracking-[0.14em] text-zinc-400 font-semibold">
-          Clip Target Duration
-        </span>
-        <span className="font-medium tabular-nums text-[#7EB8F0]">
-          {formatDurationSec(clipMaxSec)}
-        </span>
-      </div>
-      <div className="relative py-3">
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/5"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-[#0B6ED0]/80 shadow-[0_0_12px_rgba(11,110,208,0.4)]"
-          style={{
-            left: `${minPct}%`,
-            width: `${Math.max(0, maxPct - minPct)}%`,
-          }}
-          aria-hidden
-        />
-        <input
-          type="range"
-          min={CLIP_FLOOR_SEC}
-          max={CLIP_CEIL_SEC}
-          step={CLIP_STEP}
-          value={clipMinSec}
-          aria-label="Minimum clip length"
-          onMouseDown={() => setActiveThumb("min")}
-          onMouseUp={() => setActiveThumb(null)}
-          onMouseLeave={() => setActiveThumb(null)}
-          onTouchStart={() => setActiveThumb("min")}
-          onTouchEnd={() => setActiveThumb(null)}
-          onChange={(e) => onMinChange(Number(e.target.value))}
-          className={[
-            "absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 appearance-none bg-transparent",
-            "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
-            rangeThumbTw,
-            activeThumb === "min" ? "z-30" : "z-20",
-          ].join(" ")}
-          style={{ WebkitAppearance: "none" } as CSSProperties}
-        />
-        <input
-          type="range"
-          min={CLIP_FLOOR_SEC}
-          max={CLIP_CEIL_SEC}
-          step={CLIP_STEP}
-          value={clipMaxSec}
-          aria-label="Maximum clip length"
-          onMouseDown={() => setActiveThumb("max")}
-          onMouseUp={() => setActiveThumb(null)}
-          onMouseLeave={() => setActiveThumb(null)}
-          onTouchStart={() => setActiveThumb("max")}
-          onTouchEnd={() => setActiveThumb(null)}
-          onChange={(e) => onMaxChange(Number(e.target.value))}
-          className={[
-            "absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 appearance-none bg-transparent",
-            "pointer-events-none [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:pointer-events-auto",
-            rangeThumbTw,
-            activeThumb === "max" ? "z-30" : "z-10",
-          ].join(" ")}
-          style={{ WebkitAppearance: "none" } as CSSProperties}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ClipsBentoCard({
-  title,
-  body,
-  streaming,
-  className,
-}: {
-  title: string;
-  body: string;
-  streaming: boolean;
-  className?: string;
-}) {
-  const { preamble, clips } = useMemo(() => parseClipOptions(body), [body]);
-  const clipsLookStructured = clips.some(
-    (c) =>
-      Boolean(
-        c.Title ||
-        c.Timestamps ||
-        c.Transcript ||
-        c.Description ||
-        c.Duration,
-      ),
-  );
-  const showClipGrid = clips.length > 0 && clipsLookStructured;
-
-  return (
-    <article
-      className={`flex min-h-[8rem] flex-col rounded-xl border border-white/5 bg-zinc-900/40 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 animate-in fade-in slide-in-from-bottom-4 duration-700 ${className || ""}`}
-    >
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/5 pb-4">
-        <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-white/95 sm:text-2xl">
-          <span
-            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_12px_rgba(11,110,208,0.6)]"
-            style={{ backgroundColor: ACCENT }}
-            aria-hidden
-          />
-          {title}
-        </h2>
-        {streaming && !body && (
-          <span className="shrink-0 text-xs text-zinc-400 animate-pulse">Typing…</span>
-        )}
-        {body && !streaming && <SectionCopyButton text={body} />}
-      </header>
-
-      {/* Gated on showClipGrid: when it's false, the fallback branch below
-          renders the full raw `body` (which still contains this same
-          preamble text), so rendering it here too would show it twice. */}
-      {showClipGrid && preamble ? (
-        <p className="mb-6 max-w-3xl text-base leading-7 text-zinc-400">{preamble}</p>
-      ) : null}
-
-      {showClipGrid ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          {clips.map((clip, i) => (
-            <div
-              key={`${clip.optionLabel}-${i}`}
-              className="flex flex-col rounded-xl border border-white/5 bg-black/20 p-5 transition-transform hover:scale-[1.02] hover:bg-black/30"
-            >
-              <div className="mb-3 flex flex-col gap-2 border-b border-white/5 pb-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {clip.Duration ? (
-                    <span className="text-xs font-semibold tabular-nums tracking-widest text-zinc-400">
-                      {clip.Duration}
-                    </span>
-                  ) : null}
-                </div>
-                {clip.Timestamps ? (
-                  <p className="font-mono text-xs font-semibold tracking-tighter text-[#5A9FE8]">
-                    {clip.Timestamps}
-                  </p>
-                ) : null}
-                {clip.Title ? (
-                  <h3 className="text-base font-semibold leading-tight text-white/90">
-                    {clip.Title}
-                  </h3>
-                ) : null}
-              </div>
-              {clip.Transcript ? (
-                <blockquote className="mb-4 grow border-l-2 border-[#0B6ED0]/30 pl-3 text-base italic leading-7 text-zinc-400">
-                  {clip.Transcript}
-                </blockquote>
-              ) : null}
-              {clip.Description ? (
-                <p className="mb-3 text-base leading-7 text-zinc-300">
-                  {clip.Description}
-                </p>
-              ) : null}
-              {clip["Why it works"] ? (
-                <p className="mt-auto text-base leading-7 text-zinc-400 italic">
-                  <span className="font-semibold text-zinc-400">
-                    Why it works:{" "}
-                  </span>
-                  {clip["Why it works"]}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="min-w-0 flex-1 whitespace-pre-wrap text-zinc-300">
-          {body ? (
-            <Markdown components={markdownComponents}>
-              {body}
-            </Markdown>
-          ) : streaming ? (
-            <div className="flex flex-col gap-2">
-              <div className="h-4 w-full animate-pulse rounded bg-white/5" />
-              <div className="h-4 w-5/6 animate-pulse rounded bg-white/5" />
-            </div>
-          ) : null}
-        </div>
-      )}
-    </article>
-  );
-}
-
-function PromoCard({ className }: { className?: string } = {}) {
-  return (
-    <article
-      className={`relative overflow-hidden rounded-xl border border-white/5 bg-gradient-to-br from-zinc-900/80 via-zinc-900/40 to-[#0B6ED0]/10 p-6 shadow-2xl backdrop-blur-xl transition-all hover:border-white/10 group ${className || ""}`}
-    >
-      <div
-        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-25 blur-3xl transition-transform group-hover:scale-125"
-        style={{ backgroundColor: ACCENT }}
-        aria-hidden
-      />
-      <div className="relative">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7EB8F0]/80">
-          Overflow Creative
-        </p>
-        <p className="mt-2 max-w-xl text-lg font-bold tracking-tight text-white sm:text-2xl">
-          Elevate Your Church Video Production
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-          The complete masterclass for creators building the next generation of sermon content.
-        </p>
-        <Link
-          href="https://overflowcreative.net/betterchurchvideo"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#0B6ED0] px-5 py-2 text-xs font-bold text-white transition-all hover:bg-[#3d8fe8] hover:shadow-[0_0_15px_rgba(11,110,208,0.4)]"
-        >
-          Explore the Course
-          <span aria-hidden className="transition-transform group-hover:translate-x-1">→</span>
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-function ModalFrame({
-  children,
-  onClose,
-  titleId,
-  panelClassName,
-  align = "center",
-}: {
-  children: ReactNode;
-  onClose: () => void;
-  titleId: string;
-  panelClassName: string;
-  align?: "center" | "bottom";
-}) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const previousOverflow = document.body.style.overflow;
-    const dialog = dialogRef.current;
-
-    const focusableElements = () =>
-      Array.from(
-        dialog?.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      ).filter((element) => element.getClientRects().length > 0);
-
-    const focusFrame = window.requestAnimationFrame(() => {
-      const initialFocus =
-        dialog?.querySelector<HTMLElement>("[data-dialog-initial-focus]") ??
-        focusableElements()[0] ??
-        dialog;
-      initialFocus?.focus();
-    });
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-
-      const elements = focusableElements();
-      if (elements.length === 0) {
-        event.preventDefault();
-        dialog?.focus();
-        return;
-      }
-
-      const first = elements[0];
-      const last = elements[elements.length - 1];
-      const activeElement = document.activeElement;
-
-      if (event.shiftKey) {
-        if (activeElement === first || !dialog?.contains(activeElement)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else if (activeElement === last || !dialog?.contains(activeElement)) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus();
-    };
-  }, []);
-
-  return (
-    <div
-      className={[
-        "fixed inset-0 z-50 flex justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200",
-        align === "bottom"
-          ? "items-end pb-8 sm:items-center"
-          : "items-center",
-      ].join(" ")}
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className={panelClassName}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function HistoryModal({
-  items,
-  onSelect,
-  onDelete,
-  onClear,
-  onClose,
-  busy,
-}: {
-  items: HistoryItem[];
-  onSelect: (item: HistoryItem) => void;
-  onDelete: (id: string) => void;
-  onClear: () => void;
-  onClose: () => void;
-  /** A generation is streaming; loading an entry now would be overwritten by it. */
-  busy: boolean;
-}) {
-  // Clearing can't be undone and the results live nowhere else, so it takes a
-  // second click. The dialog unmounts on close, which resets this.
-  const [confirmingClear, setConfirmingClear] = useState(false);
-
-  return (
-    <ModalFrame
-      onClose={onClose}
-      titleId="history-dialog-title"
-      panelClassName="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 shadow-3xl animate-in zoom-in-95 duration-200"
-    >
-        <header className="flex items-center justify-between p-4 border-b border-white/5">
-          <h3 id="history-dialog-title" className="text-base font-bold text-white flex items-center gap-2">
-            <History className="size-4" aria-hidden />
-            Recent Generations
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-lg p-2 hover:bg-white/5"
-            aria-label="Close history"
-            data-dialog-initial-focus
-          >
-            <X className="size-5 text-zinc-400" aria-hidden />
-          </button>
-        </header>
-
-        <div className="max-h-[60vh] overflow-y-auto p-2">
-          {busy && items.length > 0 && (
-            <p className="px-3 pb-2 pt-1 text-xs text-zinc-400">
-              A result is still being generated. Open a saved one once it finishes.
-            </p>
-          )}
-          {items.length === 0 ? (
-            <div className="py-12 text-center">
-              <History className="size-10 text-zinc-800 mx-auto mb-3" />
-              <p className="text-sm text-zinc-400">No history yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="group flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-white/5 transition-all text-left"
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSelect(item)}
-                    disabled={busy}
-                    className="flex-1 min-w-0 cursor-pointer text-left disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <p className="text-sm font-semibold text-white truncate group-hover:text-[#7EB8F0] transition-colors text-left">
-                      {item.label}
-                    </p>
-                    <p className="text-xs text-zinc-400 font-mono text-left">
-                      {new Date(item.timestamp).toLocaleString()} • {formatDurationSec(item.clipMinSec)}-{formatDurationSec(item.clipMaxSec)}
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(item.id)}
-                    className="cursor-pointer rounded-lg p-2 transition-all hover:text-red-400 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus:opacity-100 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100"
-                    aria-label={`Delete ${item.label} from history`}
-                  >
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {items.length > 0 && (
-          <footer className="p-3 border-t border-white/5">
-            <button
-              type="button"
-              onClick={() => {
-                if (confirmingClear) {
-                  setConfirmingClear(false);
-                  onClear();
-                } else {
-                  setConfirmingClear(true);
-                }
-              }}
-              onBlur={() => setConfirmingClear(false)}
-              className="w-full py-2 text-xs font-bold text-red-500/80 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all cursor-pointer"
-            >
-              {confirmingClear
-                ? `Click again to clear ${items.length === 1 ? "it" : `all ${items.length}`}`
-                : "Clear All History"}
-            </button>
-          </footer>
-        )}
-    </ModalFrame>
   );
 }
 
@@ -1275,17 +474,30 @@ export default function Home() {
     }
   }, [output]);
 
-  const analyzeAnotherSermon = useCallback(() => {
+  const stopGeneration = useCallback(() => {
     // Invalidating the generation id first means every callback the
     // in-flight streamChatResponse still has queued (a chunk already read, a
     // saveToHistory about to run) checks isCurrent(), finds it stale, and
-    // becomes a no-op instead of overwriting what this reset is about to set.
+    // becomes a no-op instead of overwriting what the caller is about to set.
     // Aborting on top of that actually stops the fetch, rather than merely
     // ignoring it while it keeps streaming (and billing) on the server.
     generationIdRef.current += 1;
     activeControllerRef.current?.abort();
     activeControllerRef.current = null;
+  }, []);
 
+  // Stops a generation in progress but keeps the transcript, so the user can
+  // change the clip range and generate again without re-uploading.
+  const cancelGeneration = useCallback(() => {
+    stopGeneration();
+    setOutput("");
+    setProcessingLabel("");
+    resetResultState(false);
+    setStatus("idle");
+  }, [resetResultState, stopGeneration]);
+
+  const analyzeAnotherSermon = useCallback(() => {
+    stopGeneration();
     setOutput("");
     setProcessingLabel("");
     setFileName(null);
@@ -1296,7 +508,7 @@ export default function Home() {
     setCopied(false);
     if (inputRef.current) inputRef.current.value = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [resetResultState]);
+  }, [resetResultState, stopGeneration]);
 
   // Loads the frozen demo output directly, with no request and no rate limit
   // spent: DEMO_OUTPUT is a real, previously generated and hand verified
@@ -1322,15 +534,8 @@ export default function Home() {
     // change commits. See the isDemo effect below instead.
   }, [resetResultState, status]);
 
-  // Runs after the results div above has actually committed to the DOM
-  // (unlike requestAnimationFrame, a passive effect isn't tied to the
-  // browser's own paint/compositor loop, so it isn't at risk of being
-  // throttled in a backgrounded or non-visible tab). Only viewDemo sets
-  // isDemo to true, so this only fires for that transition, not for a
-  // normal generate or a history load. Deliberately not "smooth": the
-  // button lives far from the results, and an instant jump is the more
-  // reliable way to make sure the click visibly did something.
-  // Off the critical path, but ready before anyone can produce output.
+  // Prefetch the Markdown renderer off the critical path, so it is ready
+  // before anyone can produce output.
   useEffect(() => {
     if (typeof requestIdleCallback === "function") {
       const id = requestIdleCallback(() => void loadMarkdown());
@@ -1340,6 +545,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Runs after the results div above has actually committed to the DOM
+  // (unlike requestAnimationFrame, a passive effect isn't tied to the
+  // browser's own paint/compositor loop, so it isn't at risk of being
+  // throttled in a backgrounded or non-visible tab). Only viewDemo sets
+  // isDemo to true, so this only fires for that transition, not for a
+  // normal generate or a history load. Deliberately not "smooth": the
+  // button lives far from the results, and an instant jump is the more
+  // reliable way to make sure the click visibly did something.
   useEffect(() => {
     if (isDemo) {
       strategyOutputRef.current?.scrollIntoView({ block: "start" });
@@ -1536,7 +749,7 @@ export default function Home() {
                   <input
                     ref={inputRef}
                     type="file"
-                    accept=".txt,.srt,.vtt,text/plain"
+                    accept={[...ACCEPTED_EXTENSIONS, "text/plain"].join(",")}
                     // Beside the drop zone rather than inside it: the zone is the control
                     // (it opens this picker on click, Enter and Space), and a focusable
                     // input inside a role=button was a second, invisible tab stop that
@@ -1688,8 +901,6 @@ export default function Home() {
             </div>
           )}
 
-
-
           {showBento && (
             <div ref={strategyOutputRef} id="strategy-output" className="space-y-6 pt-8 border-t border-white/5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1704,11 +915,17 @@ export default function Home() {
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
-                    onClick={analyzeAnotherSermon}
-                    disabled={!output.trim()}
+                    onClick={streaming ? cancelGeneration : analyzeAnotherSermon}
+                    // Enabled while streaming, even before the first chunk, so a
+                    // slow or stuck generation always has a way out.
+                    disabled={!streaming && !output.trim()}
                     className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-white/10 bg-transparent px-5 py-2 text-xs font-bold text-zinc-300 transition-all hover:bg-white/5 hover:text-white disabled:opacity-30"
                   >
-                    {isDemo ? "Try Your Own Transcript" : "Analyze Another Sermon"}
+                    {streaming
+                      ? "Cancel"
+                      : isDemo
+                        ? "Try Your Own Transcript"
+                        : "Analyze Another Sermon"}
                   </button>
                   <button
                     type="button"
@@ -1779,67 +996,7 @@ export default function Home() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {sections.length > 0 ? (
-                  sections.map((s, i) => {
-                    const isTitlesSection = isTitlesSectionTitle(s.title);
-                    const isClipsSection = isClipsSectionTitle(s.title);
-
-                    let cardClassName = "col-span-1";
-                    if (isTitlesSection || isClipsSection) {
-                       cardClassName = "col-span-1 md:col-span-2";
-                    }
-
-                    if (isClipsSection) {
-                      return (
-                        <ClipsBentoCard
-                          key={`${s.title}-${i}`}
-                          title={s.title}
-                          body={s.body}
-                          className={cardClassName}
-                          streaming={streaming && i === sections.length - 1}
-                        />
-                      );
-                    } else if (isTitlesSection) {
-                      return (
-                        <TitlesBentoCard
-                          key={`${s.title}-${i}`}
-                          title={s.title}
-                          body={s.body}
-                          className={cardClassName}
-                          streaming={streaming && i === sections.length - 1}
-                        />
-                      );
-                    } else {
-                      return (
-                        <BentoCard
-                          key={`${s.title}-${i}`}
-                          title={s.title}
-                          body={s.body}
-                          className={cardClassName}
-                          streaming={streaming && i === sections.length - 1}
-                        />
-                      );
-                    }
-                  })
-                ) : streaming ? (
-                  <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
-                    <Loader2 className="size-10 animate-spin text-zinc-800 mx-auto mb-4" />
-                    <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">Constructing View...</p>
-                  </div>
-                ) : (
-                  // A finished response with nothing parseable in it would
-                  // otherwise spin here forever, which reads as a hung page.
-                  <div className="col-span-1 md:col-span-2 py-20 text-center rounded-3xl border border-dashed border-white/5 bg-white/5">
-                    <TriangleAlert className="size-10 text-amber-300/70 mx-auto mb-4" />
-                    <p className="text-sm text-zinc-400 font-bold uppercase tracking-widest">
-                      Nothing to display
-                    </p>
-                  </div>
-                )}
-
-                {!streaming && <PromoCard className="col-span-1 md:col-span-2" />}
-              </div>
+              <OutputSections sections={sections} streaming={streaming} />
             </div>
           )}
         </section>
@@ -1856,129 +1013,10 @@ export default function Home() {
         />
       )}
 
-      {showDisclaimer && (
-        <ModalFrame
-          onClose={() => setShowDisclaimer(false)}
-          titleId="privacy-dialog-title"
-          align="bottom"
-          panelClassName="w-full max-w-sm rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200"
-        >
-            <div className="mb-4 flex items-center justify-between">
-              <h3 id="privacy-dialog-title" className="text-sm font-bold text-white">Privacy</h3>
-              <button
-                type="button"
-                onClick={() => setShowDisclaimer(false)}
-                className="cursor-pointer rounded-lg p-2 text-zinc-400 hover:bg-white/5 hover:text-white"
-                aria-label="Close privacy information"
-                data-dialog-initial-focus
-              >
-                <X className="size-4" aria-hidden />
-              </button>
-            </div>
-            <ul className="space-y-3 text-xs text-zinc-400 leading-relaxed">
-              <li>
-                <span className="font-semibold text-zinc-300">Cloud processing</span> sends your transcript to a billing enabled Google Gemini API project. Google states that prompts and responses from paid services are not used to improve its products, though they may be logged for a limited period for policy enforcement and legal requirements. Only submit material you are allowed to share. Read the{" "}
-                <a
-                  href="https://ai.google.dev/gemini-api/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B93E8] underline underline-offset-2"
-                >
-                  Gemini API terms
-                </a>
-                .
-              </li>
-              <li>
-                <span className="font-semibold text-zinc-300">Local history</span> keeps up to 10 generated results in this browser only. You can remove them at any time from History.
-              </li>
-              <li>
-                <span className="font-semibold text-zinc-300">Usage limits</span> count each analysis request against per-visitor and sitewide limits to prevent abuse. The limiter on Cloudflare receives only a keyed hash of your IP address, never the address itself, your transcript or the results.
-              </li>
-              <li>
-                <span className="font-semibold text-zinc-300">Aggregate analytics</span> uses Vercel Web Analytics and Cloudflare Web Analytics to understand page traffic and performance. These analytics tools do not use session recordings, and the app does not send transcript text or generated content to either analytics tool. See{" "}
-                <a
-                  href="https://vercel.com/docs/analytics/privacy-policy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B93E8] underline underline-offset-2"
-                >
-                  Vercel&apos;s privacy information
-                </a>{" "}
-                and{" "}
-                <a
-                  href="https://developers.cloudflare.com/web-analytics/about/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#3B93E8] underline underline-offset-2"
-                >
-                  Cloudflare&apos;s analytics information
-                </a>
-                .
-              </li>
-            </ul>
-        </ModalFrame>
-      )}
+      {showDisclaimer && <PrivacyDialog onClose={() => setShowDisclaimer(false)} />}
 
       <Faq />
-      <footer className="mt-auto border-t border-white/5 bg-black/40 px-6 py-12 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-8 text-center sm:flex-row sm:justify-between sm:text-left">
-          <div className="space-y-4">
-            <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Engineered by</p>
-              <a
-                href="https://overflowcreative.net"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-lg font-bold text-white hover:text-[#3B93E8] transition-colors"
-              >
-                Overflow Creative
-              </a>
-            </div>
-            <a
-              href="https://tally.so/r/VL14Rg"
-              className="inline-flex py-1 text-xs font-bold text-[#3B93E8] hover:text-white transition-colors underline decoration-[#3B93E8]/40 underline-offset-4"
-            >
-              Share Feedback
-            </a>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <a
-              href="https://www.instagram.com/jake.crtv/"
-              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
-              aria-label="Instagram"
-            >
-              <Camera className="size-5" />
-            </a>
-            <a
-              href="https://www.youtube.com/@overflow.creative"
-              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
-              aria-label="YouTube"
-            >
-              <CirclePlay className="size-5" />
-            </a>
-            <a
-              href="https://github.com/jakeh280/sermon-intelligence"
-              className="flex size-12 items-center justify-center rounded-2xl bg-white/5 border border-white/5 text-zinc-400 hover:text-white hover:border-white/10 transition-all hover:scale-110"
-              aria-label="GitHub"
-            >
-              <GithubIcon className="size-5" />
-            </a>
-          </div>
-        </div>
-        <div className="mx-auto max-w-6xl mt-12 pt-8 border-t border-white/5 flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between">
-          <p className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em]">
-            © {new Date().getFullYear()} Overflow Creative. All Rights Reserved.
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowDisclaimer(true)}
-            className="text-xs text-zinc-400 font-semibold uppercase tracking-[0.18em] hover:text-white transition-colors"
-          >
-            Privacy
-          </button>
-        </div>
-      </footer>
+      <SiteFooter onShowPrivacy={() => setShowDisclaimer(true)} />
     </main>
   );
 }
