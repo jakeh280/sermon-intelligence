@@ -80,6 +80,10 @@ export function isCloudflareIp(ip: string): boolean {
 export function ipv6Network64(ip: string): string | null {
   const address = v6ToBigInt(ip);
   if (address === null) return null;
-  const network = (address >> BigInt(64)).toString(16).padStart(16, "0");
+  const prefix = address >> BigInt(64);
+  // ::/64 holds loopback and IPv4-mapped addresses (::ffff:a.b.c.d written in hex),
+  // not a subscriber network: grouping them would put every such visitor in one bucket.
+  if (prefix === BigInt(0)) return null;
+  const network = prefix.toString(16).padStart(16, "0");
   return `${network.match(/.{4}/g)!.join(":")}::/64`;
 }

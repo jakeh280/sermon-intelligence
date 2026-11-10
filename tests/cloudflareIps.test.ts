@@ -26,7 +26,10 @@ test("rejects everything else, including malformed input", () => {
 test("an IPv6 address reduces to its /64, and nothing else is touched", () => {
   assert.equal(ipv6Network64("2001:db8:12:34:aaaa:bbbb:cccc:dddd"), "2001:0db8:0012:0034::/64");
   assert.equal(ipv6Network64("2001:DB8:12:34::1"), "2001:0db8:0012:0034::/64");
-  assert.equal(ipv6Network64("::1"), "0000:0000:0000:0000::/64");
+  // ::/64 is loopback and hex-written IPv4-mapped addresses, never a subscriber network:
+  // reducing it would put every IPv4 visitor seen in that form into one shared bucket.
+  assert.equal(ipv6Network64("::1"), null);
+  assert.equal(ipv6Network64("::ffff:cb00:7107"), null);
   assert.equal(ipv6Network64("203.0.113.7"), null);
   assert.equal(ipv6Network64("::ffff:203.0.113.7"), null);
   assert.equal(ipv6Network64("unknown"), null);
