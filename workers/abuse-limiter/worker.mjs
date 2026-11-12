@@ -16,6 +16,13 @@ export class RequestBudget {
   }
 
   async fetch(request) {
+    if (request.method === 'GET' && new URL(request.url).pathname === '/health') {
+      // Exercise the real storage binding without inserting a hit or spending
+      // any visitor's allowance. Failures propagate as a non-200 response.
+      this.sql.exec('SELECT count FROM totals LIMIT 1').toArray();
+      await this.storage.getAlarm();
+      return Response.json({ healthy: true }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const { ip } = await request.json();
     if (typeof ip !== 'string' || !/^[a-f0-9]{64}$/.test(ip)) return new Response(null, { status: 400 });
     const now = Date.now();
@@ -64,19 +71,22 @@ function sameSecret(actual, expected) {
 const worker = {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
-    if (request.method !== 'POST' || !['/consume/production', '/consume/preview'].includes(path)) {
+    const health = request.method === 'GET' && ['/health/production', '/health/preview'].includes(path);
+    const consume = request.method === 'POST' && ['/consume/production', '/consume/preview'].includes(path);
+    if (!health && !consume) {
       return new Response(null, { status: 404 });
     }
     if (!sameSecret(request.headers.get('Authorization'), `Bearer ${env.LIMITER_SECRET || ''}`) || !env.LIMITER_SECRET) {
       return new Response(null, { status: 401 });
     }
+    const id = env.BUDGET.idFromName(path.endsWith('/production') ? 'production' : 'preview');
+    if (health) return env.BUDGET.get(id).fetch(new Request('https://internal/health'));
     if (Number(request.headers.get('Content-Length') || 0) > 128) return new Response(null, { status: 413 });
     const text = await request.text();
     if (text.length > 128) return new Response(null, { status: 413 });
     let body;
     try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
     if (typeof body?.ip !== 'string' || !/^[a-f0-9]{64}$/.test(body.ip)) return new Response(null, { status: 400 });
-    const id = env.BUDGET.idFromName(path.endsWith('/production') ? 'production' : 'preview');
     return env.BUDGET.get(id).fetch(new Request('https://internal/consume', { method: 'POST', body: JSON.stringify({ ip: body.ip }) }));
   },
 };

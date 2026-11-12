@@ -21,6 +21,43 @@ not spend that hourly allowance. The proxy cannot accumulate failed retries
 across an hour or describe them as used analyses. The older proxy hourly behavior
 below is historical. Limiter failures log safe HTTP status or error type;
 credentials, URLs, response bodies, addresses and transcripts are never logged.
+The diagnostic production deployment identified HTTP 401 from the Worker, so
+Vercel and Cloudflare disagreed on the shared credential. Rotated
+`LIMITER_SECRET` in Cloudflare and `ABUSE_LIMITER_SECRET` in both Vercel
+environments together on 2026-11-11. Application deployments must follow a
+rotation because Vercel injects variables at deployment time. Do not disable
+admission as an outage workaround.
+
+**Availability monitoring:** `/api/health` checks that the Gemini key is configured
+and calls the authenticated `/health/production` or `/health/preview` Worker
+endpoint. That endpoint exercises the real Durable Object database and alarm
+storage without writing a hit, changing totals or using Gemini. Public health
+responses contain only `healthy` and can be cached for 60 seconds to bound load.
+This does not validate the Google key or generate output; a full smoke test does.
+Deploy the Worker before deploying the health route.
+
+The runtime entry is `workers/abuse-limiter/entry.mjs`, which exports only the
+handler and a class extending `DurableObject`. The testable implementation is
+`worker.mjs`. Exporting numeric constants directly from the configured entry
+fails Cloudflare startup, which Node tests alone did not detect. CI now starts
+Wrangler's real local runtime and checks authenticated health, non-consuming
+probes, hourly admission and environment isolation:
+`npm exec --yes --package=wrangler@4 -- node scripts/test-worker-runtime.mjs`.
+It uses temporary local storage, a synthetic key, and no Cloudflare login.
+
+`.github/workflows/production-health.yml` runs the health probe about every 15
+minutes (GitHub schedules can be delayed), on manual dispatch, and after a
+successful production deployment. Deployment checks also run a complete analysis
+of a synthetic sermon and validate four output sections and three complete clips.
+The script is `scripts/check-production.ts`; run it with Node 24 and
+`--experimental-strip-types`, adding `--generate` for the full analysis. A failed
+probe fails the Actions run, using GitHub's workflow failure notification
+settings. Scheduled checks consume no Gemini quota or analysis allowance. This
+public repository's standard GitHub hosted runners are free.
+
+**Credential changes:** update the Worker and Vercel secrets together, redeploy,
+and run the full production check. A successful homepage response or Vercel
+build alone does not demonstrate that analysis works.
 
 **File:** `proxy.ts` at the root. This is Next.js middleware, not a helper the
 API route calls: as of Next 16, a root `proxy.ts` exporting a `proxy` function
@@ -130,6 +167,31 @@ verified output, not a live generation.
 ---
 
 ## Deployment & Environment
+
+### Agent access on Jake's Linux desktop
+
+Vercel is connected through the Vercel connector and needs no CLI login for
+project inspection, environment edits or deployments. Project ID:
+`prj_qeCsW6K1CbjirYfJY4ds0un2RbWf`, team:
+`team_wEIOGrgza3tXtXGHh7ed8K6H`.
+
+Jake authorized persistent Cloudflare access on 2026-11-11. Its API token is in
+the desktop Secret Service keyring, never in the repository, shell config, or
+`.env.local`. Look it up only into the process that needs it:
+
+```bash
+CLOUDFLARE_API_TOKEN="$(secret-tool lookup service cloudflare-workers account 4338eabd7ae92bef4aad1906282ec7b2)" \
+CLOUDFLARE_ACCOUNT_ID=4338eabd7ae92bef4aad1906282ec7b2 \
+npx --yes wrangler@4 deploy --config workers/abuse-limiter/wrangler.jsonc
+```
+
+The keyring must be unlocked in the desktop session. The token has been verified
+for Worker settings, secret updates and deployment. Keep access scoped to the
+Cloudflare account and Workers permissions needed for this service. If it is
+revoked or expires, request its replacement through the secure secret tool, then
+update the same keyring item. Do not print it or put it in command arguments.
+This desktop keyring is machine specific; a different machine needs its own
+secure access setup.
 
 - **Platform:** Vercel free hobby tier, current Vercel Node.js runtime
 - **`maxDuration = 60`** seconds for streaming responses

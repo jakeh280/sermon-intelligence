@@ -1,7 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sharedRateLimit } from "../lib/sharedRateLimit.ts";
+import { limiterHealth, sharedRateLimit } from "../lib/sharedRateLimit.ts";
 const settings = { url: "https://limits.example/consume/production", secret: "test-secret", required: true };
+test("health checks authenticate against the matching environment without consuming admission", async () => {
+  for (const environment of ["production", "preview"]) {
+    assert.equal(await limiterHealth({ ...settings, url: `https://limits.example/consume/${environment}` }, async (url, init) => {
+      assert.equal(String(url), `https://limits.example/health/${environment}`);
+      assert.equal(init?.method ?? "GET", "GET");
+      assert.equal(init?.body, undefined);
+      assert.equal(new Headers(init?.headers).get("Authorization"), `Bearer ${settings.secret}`);
+      return Response.json({ healthy: true });
+    }), true);
+  }
+  assert.equal(await limiterHealth({ ...settings, secret: undefined }), false);
+  for (const answer of [() => new Response(null, { status: 401 }), () => new Response(null, { status: 500 }), () => Response.json({}), () => Response.json({ healthy: "true" }), () => { throw new TypeError("network failure"); }]) {
+    assert.equal(await limiterHealth(settings, async () => answer()), false);
+  }
+});
 test("limiter HTTP diagnostics identify failure without logging credentials or bodies", async (t) => {
   const logs: unknown[][] = [];
   t.mock.method(console, "error", (...args: unknown[]) => logs.push(args));

@@ -1,6 +1,6 @@
 {
   "name": "sermon-intelligence-abuse-limiter",
-  "main": "worker.mjs",
+  "main": "entry.mjs",
   "compatibility_date": "2026-10-21",
   "workers_dev": true,
   "preview_urls": false,

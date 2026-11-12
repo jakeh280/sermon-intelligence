@@ -39,5 +39,9 @@ jobs:
       - name: Test analysis logic
         run: npm test
 
+      # Node mocks cannot detect invalid Worker exports or binding failures.
+      - name: Test Cloudflare runtime
+        run: npm exec --yes --package=wrangler@4 -- node scripts/test-worker-runtime.mjs
+
       - name: Build
         run: npm run build

@@ -1,5 +1,40 @@
 import { createHmac } from "node:crypto";
 
+function environmentSettings() {
+  return {
+    url: process.env.ABUSE_LIMITER_URL,
+    secret: process.env.ABUSE_LIMITER_SECRET,
+    required: process.env.VERCEL_ENV === "production" || process.env.VERCEL_ENV === "preview",
+  };
+}
+
+/** Checks authenticated Worker storage without consuming an analysis slot. */
+export async function limiterHealth(
+  settings = environmentSettings(),
+  send: typeof fetch = fetch,
+): Promise<boolean> {
+  if (!settings.url || !settings.secret) return !settings.required;
+  try {
+    const url = new URL(settings.url);
+    if (url.protocol !== "https:" || url.username || url.password ||
+        !/^\/consume\/(production|preview)$/.test(url.pathname)) throw Error("Invalid limiter URL");
+    url.pathname = url.pathname.replace("/consume/", "/health/");
+    const response = await send(url, {
+      headers: { Authorization: `Bearer ${settings.secret}` },
+      signal: AbortSignal.timeout(5000), cache: "no-store", redirect: "error",
+    });
+    if (!response.ok) {
+      console.error("ABUSE_LIMITER_HEALTH_FAILED", { status: response.status });
+      return false;
+    }
+    const body: unknown = await response.json();
+    return typeof body === "object" && body !== null && "healthy" in body && body.healthy === true;
+  } catch (error) {
+    console.error("ABUSE_LIMITER_HEALTH_FAILED", { reason: error instanceof Error ? error.name : "unknown_error" });
+    return false;
+  }
+}
+
 export type LimitScope = "address" | "site";
 type Result =
   | { allowed: true }
@@ -8,11 +43,7 @@ type Result =
 
 export async function sharedRateLimit(
   ip: string,
-  settings = {
-    url: process.env.ABUSE_LIMITER_URL,
-    secret: process.env.ABUSE_LIMITER_SECRET,
-    required: process.env.VERCEL_ENV === "production" || process.env.VERCEL_ENV === "preview",
-  },
+  settings = environmentSettings(),
   send: typeof fetch = fetch,
 ): Promise<Result> {
   if (!settings.url || !settings.secret) {

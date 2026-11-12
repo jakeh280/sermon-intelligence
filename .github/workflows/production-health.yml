@@ -1,0 +1,36 @@
+name: Production health
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+  deployment_status:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health
+  cancel-in-progress: false
+
+jobs:
+  health:
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' &&
+      (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check analysis availability
+        if: github.event_name != 'deployment_status'
+        run: node --experimental-strip-types scripts/check-production.ts
+      - name: Verify a full analysis after deployment
+        if: github.event_name == 'deployment_status'
+        run: node --experimental-strip-types scripts/check-production.ts --generate

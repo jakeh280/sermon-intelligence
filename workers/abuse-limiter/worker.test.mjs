@@ -84,3 +84,25 @@ test('worker refuses unauthenticated, oversized, invalid and unexpected requests
   assert.equal((await send('/consume/production', headers)).status, 200);
   assert.equal(calls, 1);
 });
+
+test('authenticated health probes exercise storage without using any allowance', async () => {
+  const f = fixture();
+  const names = [];
+  const env = { LIMITER_SECRET: 'test-secret', BUDGET: {
+    idFromName: name => { names.push(name); return name; },
+    get: () => f.budget,
+  } };
+  try {
+    assert.equal((await worker.fetch(new Request('https://limits.example/health/production'), env)).status, 401);
+    for (const environment of ['production', 'preview']) {
+      const request = new Request(`https://limits.example/health/${environment}`, { headers: { Authorization: 'Bearer test-secret' } });
+      assert.deepEqual(await (await worker.fetch(request, env)).json(), { healthy: true });
+    }
+    assert.deepEqual(names, ['production', 'preview']);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM hits').get().n, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM totals').get().n, 0);
+    assert.equal(f.alarm.at, null);
+    for (let i = 0; i < ADDRESS_LIMIT; i++) assert.equal((await f.consume()).allowed, true);
+    assert.equal((await f.consume()).allowed, false);
+  } finally { f.db.close(); }
+});
