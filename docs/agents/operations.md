@@ -58,6 +58,19 @@ probe fails the Actions run, using GitHub's workflow failure notification
 settings. Scheduled checks consume no Gemini quota or analysis allowance. This
 public repository's standard GitHub hosted runners are free.
 
+Cloudflare rejected GitHub hosted runner probes with 403 even though the live
+analysis worked. The monitor now sends the `PRODUCTION_MONITOR_TOKEN` GitHub
+Actions secret as `x-sermon-monitor`. A Cloudflare custom skip rule matches only
+that credential, `www.sermonintelligence.com`, GET `/api/health`, and POST
+`/api/chat`; it skips Browser Integrity Check, Security Level, and managed WAF
+inspection for these trusted probes. Application admission limits remain active.
+All other requests retain normal Cloudflare checks. Ruleset:
+`70bedbe7b0ab459380b2eee72c4119a7`; rule:
+`ceb329c6e79948ed9599aa590aae7c75` (`sermon_production_monitor`). The monitor
+credential is also in the desktop keyring under `service=sermon-production-monitor`
+and `repository=jakeh280/sermon-intelligence`, so it can be rotated together with
+the GitHub secret and rule. Never put its value in this repository or logs.
+
 **Credential changes:** update the Worker and Vercel secrets together, redeploy,
 and run the full production check. A successful homepage response or Vercel
 build alone does not demonstrate that analysis works.
@@ -193,11 +206,13 @@ for Worker settings, secret updates and deployment. Keep access scoped to the
 Cloudflare account and Workers permissions needed for this service. If it is
 revoked or expires, request its replacement through the secure secret tool, then
 update the same keyring item. Do not print it or put it in command arguments.
-The initially supplied token expires at `2026-11-19T04:59:59Z` (November 18 at
-11:59 PM Eastern). A replacement with no expiration and the same scoped
-permissions was requested securely for lasting access. Until it is replaced,
-access is available only until that expiration. This desktop keyring is machine
-specific; a different machine needs its own secure access setup.
+The initial expiring token was replaced the same day with Jake's
+`Omarchy Maintenance` token. Cloudflare verified it as active with no expiration.
+It grants Workers Scripts Edit and Workers Tail Read for Jake's account, plus
+Zone Read and Zone WAF Edit across his zones, as Jake authorized for future
+maintenance. Vercel access remains through its persistent connector. Tokens can
+still be revoked, and the desktop keyring is machine specific; another machine
+needs its own secure access setup.
 
 - **Platform:** Vercel free hobby tier, current Vercel Node.js runtime
 - **`maxDuration = 60`** seconds for streaming responses

@@ -2,12 +2,17 @@ import { pathToFileURL } from "node:url";
 import { describeOutputIssues } from "../lib/outputHealth.ts";
 
 const origin = "https://www.sermonintelligence.com";
-const monitorHeaders = { "User-Agent": "SermonIntelligenceMonitor/1.0 (+https://www.sermonintelligence.com)" };
+const monitorHeaders: Record<string, string> = {
+  "User-Agent": "SermonIntelligenceMonitor/1.0 (+https://www.sermonintelligence.com)",
+};
+if (process.env.PRODUCTION_MONITOR_TOKEN) {
+  monitorHeaders["x-sermon-monitor"] = process.env.PRODUCTION_MONITOR_TOKEN;
+}
 
 export async function checkProduction(send: typeof fetch = fetch, generate = false) {
   const health = await send(`${origin}/api/health`, { headers: monitorHeaders, signal: AbortSignal.timeout(15_000) });
   if (!health.ok || (await health.json()).healthy !== true) {
-    throw new Error(`Production analysis health check failed: HTTP ${health.status}`);
+    throw new Error(`Production analysis health check failed: HTTP ${health.status}, server ${health.headers.get("server") ?? "unknown"}, challenge ${health.headers.get("cf-mitigated") ?? "none"}`);
   }
   console.log("Production limiter authentication and storage are healthy.");
 

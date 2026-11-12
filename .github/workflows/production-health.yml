@@ -21,6 +21,8 @@ jobs:
       (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    env:
+      PRODUCTION_MONITOR_TOKEN: ${{ secrets.PRODUCTION_MONITOR_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
