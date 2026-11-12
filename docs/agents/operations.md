@@ -58,18 +58,15 @@ probe fails the Actions run, using GitHub's workflow failure notification
 settings. Scheduled checks consume no Gemini quota or analysis allowance. This
 public repository's standard GitHub hosted runners are free.
 
-Cloudflare rejected GitHub hosted runner probes with 403 even though the live
-analysis worked. The monitor now sends the `PRODUCTION_MONITOR_TOKEN` GitHub
-Actions secret as `x-sermon-monitor`. A Cloudflare custom skip rule matches only
-that credential, `www.sermonintelligence.com`, GET `/api/health`, and POST
-`/api/chat`; it skips Browser Integrity Check, Security Level, and managed WAF
-inspection for these trusted probes. Application admission limits remain active.
-All other requests retain normal Cloudflare checks. Ruleset:
-`70bedbe7b0ab459380b2eee72c4119a7`; rule:
-`ceb329c6e79948ed9599aa590aae7c75` (`sermon_production_monitor`). The monitor
-credential is also in the desktop keyring under `service=sermon-production-monitor`
-and `repository=jakeh280/sermon-intelligence`, so it can be rotated together with
-the GitHub secret and rule. Never put its value in this repository or logs.
+Cloudflare's Security Events identified `bot_fight_mode` as the source of 403
+browser challenges for GitHub hosted runners. Free Bot Fight Mode cannot be
+skipped by WAF rules. Disabled only `fight_mode` on 2026-11-11, and verified all
+other Bot Management settings were preserved, including AI crawler blocking.
+Managed WAF, DDoS protection and application rate limits remain active. The
+experimental monitor exception and its temporary GitHub/keyring secret were
+removed. Probes run through the ordinary public domain and firewall without a
+special bypass credential. Do not re-enable Bot Fight Mode without checking API
+clients and monitoring; a browser challenge cannot be solved by these clients.
 
 **Credential changes:** update the Worker and Vercel secrets together, redeploy,
 and run the full production check. A successful homepage response or Vercel
@@ -209,8 +206,8 @@ update the same keyring item. Do not print it or put it in command arguments.
 The initial expiring token was replaced the same day with Jake's
 `Omarchy Maintenance` token. Cloudflare verified it as active with no expiration.
 It grants Workers Scripts Edit and Workers Tail Read for Jake's account, plus
-Zone Read and Zone WAF Edit across his zones, as Jake authorized for future
-maintenance. Vercel access remains through its persistent connector. Tokens can
+Zone Read, Zone WAF Edit, Analytics Read and Bot Management Edit across his
+zones, as Jake authorized for future maintenance. Vercel access remains through its persistent connector. Tokens can
 still be revoked, and the desktop keyring is machine specific; another machine
 needs its own secure access setup.
 

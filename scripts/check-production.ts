@@ -5,9 +5,6 @@ const origin = "https://www.sermonintelligence.com";
 const monitorHeaders: Record<string, string> = {
   "User-Agent": "SermonIntelligenceMonitor/1.0 (+https://www.sermonintelligence.com)",
 };
-if (process.env.PRODUCTION_MONITOR_TOKEN) {
-  monitorHeaders["x-sermon-monitor"] = process.env.PRODUCTION_MONITOR_TOKEN;
-}
 
 export async function checkProduction(send: typeof fetch = fetch, generate = false) {
   const health = await send(`${origin}/api/health`, { headers: monitorHeaders, signal: AbortSignal.timeout(15_000) });
