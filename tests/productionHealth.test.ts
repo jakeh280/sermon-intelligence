@@ -11,8 +11,9 @@ test("monitor refuses broken or misleading health responses", async () => {
 
 test("scheduled health probes make no generation request", async () => {
   let calls = 0;
-  await checkProduction(async (url) => {
+  await checkProduction(async (url, init) => {
     assert.equal(String(url), "https://www.sermonintelligence.com/api/health");
+    assert.match(new Headers(init?.headers).get("User-Agent") ?? "", /^SermonIntelligenceMonitor\//);
     calls++;
     return Response.json({ healthy: true });
   });

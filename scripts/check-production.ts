@@ -2,9 +2,10 @@ import { pathToFileURL } from "node:url";
 import { describeOutputIssues } from "../lib/outputHealth.ts";
 
 const origin = "https://www.sermonintelligence.com";
+const monitorHeaders = { "User-Agent": "SermonIntelligenceMonitor/1.0 (+https://www.sermonintelligence.com)" };
 
 export async function checkProduction(send: typeof fetch = fetch, generate = false) {
-  const health = await send(`${origin}/api/health`, { signal: AbortSignal.timeout(15_000) });
+  const health = await send(`${origin}/api/health`, { headers: monitorHeaders, signal: AbortSignal.timeout(15_000) });
   if (!health.ok || (await health.json()).healthy !== true) {
     throw new Error(`Production analysis health check failed: HTTP ${health.status}`);
   }
@@ -21,7 +22,7 @@ export async function checkProduction(send: typeof fetch = fetch, generate = fal
 [00:02:30:00] Let us pray. Jesus, teach us to remain in your love. Help us receive before we try to give. Open our eyes to the people nearby and give us courage to serve them without seeking recognition. Let our words be truthful and kind. Let our schedules have room for mercy. May the love we have received from you become visible in the ordinary places where we live and work this week. Amen.
 [00:03:00:00] End of sermon.`;
     const response = await send(`${origin}/api/chat`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { ...monitorHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ text, clipMinSec: 15, clipMaxSec: 60 }),
       signal: AbortSignal.timeout(75_000),
     });

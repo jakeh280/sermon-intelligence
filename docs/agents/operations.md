@@ -25,8 +25,11 @@ The diagnostic production deployment identified HTTP 401 from the Worker, so
 Vercel and Cloudflare disagreed on the shared credential. Rotated
 `LIMITER_SECRET` in Cloudflare and `ABUSE_LIMITER_SECRET` in both Vercel
 environments together on 2026-11-11. Application deployments must follow a
-rotation because Vercel injects variables at deployment time. Do not disable
-admission as an outage workaround.
+rotation because Vercel injects variables at deployment time. Verified the live
+Worker in both environments, then generated a complete production analysis with
+four sections and three complete clips. Worker version:
+`f7c085e2-efa3-4312-8bc7-bce3ea778c1b`. Do not disable admission as an outage
+workaround.
 
 **Availability monitoring:** `/api/health` checks that the Gemini key is configured
 and calls the authenticated `/health/production` or `/health/preview` Worker
@@ -190,8 +193,11 @@ for Worker settings, secret updates and deployment. Keep access scoped to the
 Cloudflare account and Workers permissions needed for this service. If it is
 revoked or expires, request its replacement through the secure secret tool, then
 update the same keyring item. Do not print it or put it in command arguments.
-This desktop keyring is machine specific; a different machine needs its own
-secure access setup.
+The initially supplied token expires at `2026-11-19T04:59:59Z` (November 18 at
+11:59 PM Eastern). A replacement with no expiration and the same scoped
+permissions was requested securely for lasting access. Until it is replaced,
+access is available only until that expiration. This desktop keyring is machine
+specific; a different machine needs its own secure access setup.
 
 - **Platform:** Vercel free hobby tier, current Vercel Node.js runtime
 - **`maxDuration = 60`** seconds for streaming responses
