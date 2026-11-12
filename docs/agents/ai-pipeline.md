@@ -67,6 +67,12 @@ export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
 
 ### Clip Range Slider
 
+The input screen shows one full width clip range card. The obsolete "Cloud AI"
+comparison card was removed because there is no local processing option. A short
+hint below either transcript input retains the approximate two hour limit;
+processing details remain in Privacy, and usage limits in the FAQ and community
+notice below Generate.
+
 - Floor: 15 seconds (`CLIP_MIN_ALLOWED`)
 - Ceiling: 600 seconds (`CLIP_MAX_ALLOWED`)
 - Step: 5 seconds (snapped to nearest 5)

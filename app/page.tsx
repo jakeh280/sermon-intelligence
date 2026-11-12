@@ -814,6 +814,10 @@ export default function Home() {
                 />
               )}
 
+              <p className="text-center text-xs text-zinc-400">
+                Supports transcripts up to about 2 hours.
+              </p>
+
               {missingTimestamps && (
                 <div
                   className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-6 py-4 text-center"
@@ -830,27 +834,13 @@ export default function Home() {
               )}
 
               <div className="flex flex-col gap-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-                  <div className="flex flex-col justify-center space-y-4 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
-                    <DualClipRangeSlider
-                      clipMinSec={clipMinSec}
-                      clipMaxSec={clipMaxSec}
-                      onMinChange={applyClipMin}
-                      onMaxChange={applyClipMax}
-                    />
-                  </div>
-
-                  <div className="flex flex-col justify-center gap-3 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
-                    <div className="text-center space-y-1">
-                      <p className="text-xs font-bold text-zinc-300 uppercase tracking-widest">Cloud AI</p>
-                      <p className="text-xs text-zinc-400 leading-relaxed">
-                        Smarter results • Handles transcripts up to about 2 hours
-                      </p>
-                      <p className="text-xs text-zinc-400 font-medium">
-                        Limited free uses per hour
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex flex-col justify-center space-y-4 rounded-3xl border border-white/5 bg-white/5 px-6 py-6 backdrop-blur-xl shadow-2xl">
+                  <DualClipRangeSlider
+                    clipMinSec={clipMinSec}
+                    clipMaxSec={clipMaxSec}
+                    onMinChange={applyClipMin}
+                    onMaxChange={applyClipMax}
+                  />
                 </div>
 
                 <div className="flex flex-col gap-4">
