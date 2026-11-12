@@ -16,6 +16,7 @@ export async function sharedRateLimit(
   send: typeof fetch = fetch,
 ): Promise<Result> {
   if (!settings.url || !settings.secret) {
+    if (settings.required) console.error("ABUSE_LIMITER_UNAVAILABLE", { reason: "missing_config" });
     return settings.required ? { allowed: false, status: 503, retryAfter: 60 } : { allowed: true };
   }
   try {
@@ -30,7 +31,11 @@ export async function sharedRateLimit(
       cache: "no-store",
       redirect: "error",
     });
-    if (!response.ok) throw Error("Limiter unavailable");
+    if (!response.ok) {
+      // Status is safe to log. Bodies, headers and URLs can contain secrets.
+      console.error("ABUSE_LIMITER_UNAVAILABLE", { reason: "http_error", status: response.status });
+      return { allowed: false, status: 503, retryAfter: 60 };
+    }
     const result: unknown = await response.json();
     if (typeof result !== "object" || result === null || !("allowed" in result)) throw Error("Invalid limiter response");
     if (result.allowed === true) return { allowed: true };
@@ -41,8 +46,10 @@ export async function sharedRateLimit(
       return { allowed: false, status: 429, retryAfter: Math.ceil(result.retryAfter), scope };
     }
     throw Error("Invalid limiter response");
-  } catch {
-    console.error("ABUSE_LIMITER_UNAVAILABLE");
+  } catch (error) {
+    console.error("ABUSE_LIMITER_UNAVAILABLE", {
+      reason: error instanceof Error ? error.name : "unknown_error",
+    });
     return { allowed: false, status: 503, retryAfter: 60 };
   }
 }

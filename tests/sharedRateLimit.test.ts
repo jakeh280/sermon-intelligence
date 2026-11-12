@@ -2,6 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { sharedRateLimit } from "../lib/sharedRateLimit.ts";
 const settings = { url: "https://limits.example/consume/production", secret: "test-secret", required: true };
+test("limiter HTTP diagnostics identify failure without logging credentials or bodies", async (t) => {
+  const logs: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => logs.push(args));
+  for (const status of [401, 429, 500, 503]) {
+    const result = await sharedRateLimit("private-address", settings, async () => new Response("private-body", { status }));
+    assert.deepEqual(result, { allowed: false, status: 503, retryAfter: 60 });
+    assert.deepEqual(logs.at(-1), ["ABUSE_LIMITER_UNAVAILABLE", { reason: "http_error", status }]);
+  }
+  const logged = JSON.stringify(logs);
+  for (const privateValue of [settings.secret, settings.url, "private-address", "private-body"]) {
+    assert.equal(logged.includes(privateValue), false);
+  }
+});
 test("shared admission hashes addresses and sends no transcript", async () => {
   const result = await sharedRateLimit("192.0.2.10", settings, async (url, init) => {
     assert.equal(String(url), settings.url);

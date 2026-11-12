@@ -12,6 +12,16 @@ Cannot fetch live YouTube transcripts from Vercel (requests are blocked). Featur
 
 ## Rate Limiting
 
+**Outage hardening (2026-11-11):** Brandon reported repeated 503 responses for
+two days, followed by an hourly refusal without any analysis. Reproduced on
+production; Vercel logged `ABUSE_LIMITER_UNAVAILABLE`. The proxy now only limits
+bursts to 60 requests per minute (`BURST_*` in `lib/rateLimitConfig.ts`). The
+persistent Worker still enforces 20 admissions per hour. A failed admission does
+not spend that hourly allowance. The proxy cannot accumulate failed retries
+across an hour or describe them as used analyses. The older proxy hourly behavior
+below is historical. Limiter failures log safe HTTP status or error type;
+credentials, URLs, response bodies, addresses and transcripts are never logged.
+
 **File:** `proxy.ts` at the root. This is Next.js middleware, not a helper the
 API route calls: as of Next 16, a root `proxy.ts` exporting a `proxy` function
 is auto-wired in and runs before every matching request (`next build` lists it

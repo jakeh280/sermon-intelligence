@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  RATE_LIMIT_MAX_REQUESTS,
-  RATE_LIMIT_WINDOW_MS,
+  BURST_MAX_REQUESTS,
+  BURST_WINDOW_MS,
 } from "@/lib/rateLimitConfig";
 import { checkAndRecord, getClientIp } from "@/lib/proxyRateLimit";
-import { rateLimitMessage } from "@/lib/rateLimitMessage";
 
 const ipStore = new Map<string, number[]>();
 
@@ -18,14 +17,14 @@ export function proxy(req: NextRequest) {
     ipStore,
     ip,
     Date.now(),
-    RATE_LIMIT_WINDOW_MS,
-    RATE_LIMIT_MAX_REQUESTS,
+    BURST_WINDOW_MS,
+    BURST_MAX_REQUESTS,
   );
 
   if (result.limited) {
     const retryAfter = result.resetInMinutes * 60;
     return new NextResponse(
-      JSON.stringify({ error: rateLimitMessage(retryAfter) }),
+      JSON.stringify({ error: "Too many requests at once. Please wait a minute and try again." }),
       {
         status: 429,
         headers: {

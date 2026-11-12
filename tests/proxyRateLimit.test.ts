@@ -2,9 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { checkAndRecord, getClientIp } from "../lib/proxyRateLimit.ts";
+import { BURST_MAX_REQUESTS, BURST_WINDOW_MS } from "../lib/rateLimitConfig.ts";
 
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_REQUESTS = 20;
+
+test("outage retries cannot accumulate into an hourly proxy refusal", () => {
+  const store = new Map<string, number[]>();
+  for (let attempt = 0; attempt < 100; attempt++) {
+    assert.equal(checkAndRecord(store, "visitor", attempt * 60_000, BURST_WINDOW_MS, BURST_MAX_REQUESTS).limited, false);
+  }
+  for (let attempt = 0; attempt < BURST_MAX_REQUESTS; attempt++) {
+    assert.equal(checkAndRecord(store, "burst", 0, BURST_WINDOW_MS, BURST_MAX_REQUESTS).limited, false);
+  }
+  assert.equal(checkAndRecord(store, "burst", 0, BURST_WINDOW_MS, BURST_MAX_REQUESTS).limited, true);
+  assert.equal(checkAndRecord(store, "burst", 60_000, BURST_WINDOW_MS, BURST_MAX_REQUESTS).limited, false);
+});
 
 function headers(entries: Record<string, string>) {
   return {
