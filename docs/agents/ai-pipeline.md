@@ -124,7 +124,18 @@ unstructured, missing-section, or incomplete-clips results (a Clips section
 whose heading and body arrived but didn't resolve to 3 fully-fielded clips).
 Never run it mid stream: a partial stream is legitimately missing sections.
 
-AI response is streamed as Markdown and parsed into sections:
+The AI response is received as a stream, then held until it is complete so
+generated clip times cannot be copied before source verification. The client
+matches each clip quote uniquely against normalized transcript segments and
+replaces model supplied clip timing with the preceding source marker. When a
+quote covers complete source segments with explicit end boundaries, the source
+range and approximate duration are shown; otherwise the end and duration are
+unavailable. Repeated or altered quotes have no verified time. Frame and
+millisecond precision is not inferred. Historical results created before this
+check are unchanged. Chapter timing remains a model suggestion and must be
+checked against the recording.
+
+Markdown is parsed into sections:
 - Splits on `### ` headers via `parseBentoSections()`
 - Each section becomes a Bento card
 - **Titles section:** Rendered as 3-column flex layout
@@ -147,7 +158,7 @@ frame (heading, "Typing…" hint, copy button). Card types:
 3. **ClipsBentoCard** — Parses and displays 3 clip options in grid layout
 
 All cards:
-- Stream live as text arrives
+- Display the completed, checked response
 - Include copy-to-clipboard
 - Animate in with `fade-in slide-in-from-bottom`
 - Support full Markdown formatting

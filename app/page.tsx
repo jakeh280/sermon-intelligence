@@ -31,6 +31,7 @@ import {
 } from "@/lib/historyStorage";
 import { parseBentoSections } from "@/lib/outputParsing";
 import { describeOutputIssues, type OutputIssue } from "@/lib/outputHealth";
+import { verifyClipTiming } from "@/lib/verifiedClips";
 import {
   describeRequestFailure,
   STALL_TIMEOUT_MS,
@@ -343,9 +344,7 @@ export default function Home() {
           minSec,
           maxSec,
           controller,
-          (accumulated) => {
-            if (isCurrent()) setOutput(accumulated);
-          },
+          () => {},
         );
 
         // A reset that landed after the stream finished but before this line
@@ -365,7 +364,9 @@ export default function Home() {
           return;
         }
 
-        saveToHistory(label, result, minSec, maxSec);
+        const verified = verifyClipTiming(result, text);
+        setOutput(verified);
+        saveToHistory(label, verified, minSec, maxSec);
         setOutputIssues(issues);
         setLimitNotice(null);
         setStatus("idle");
@@ -587,7 +588,7 @@ export default function Home() {
       inputMode === "upload"
         ? fileName ?? "File Upload"
         : `Pasted Text (${pastedText.trim().split(/\s+/).length} words)`;
-    void runWithText(normalizeTranscript(trimmed), label, minSec, maxSec);
+    void runWithText(trimmed, label, minSec, maxSec);
   }, [
     clipMaxSec,
     clipMinSec,
