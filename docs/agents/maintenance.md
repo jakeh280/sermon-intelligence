@@ -72,3 +72,8 @@ formats, and includes validation commands. No live Gemini generation was run.
 The full audit no longer lists `braces`. Its only advisory is `minimatch`
 (GHSA-g3hv-75wg-m249, below 11.0.1) under ESLint and `eslint-config-next`.
 Its only patched line is minimatch 11, and the packages that pull it in (ESLint 9 and its plugins, or the Sanity CLI tooling) need the 3.x API, so an override would break them; every fix npm offers is a major downgrade. It is a development-time denial of service only. No override was applied. `npm audit --omit=dev` reports zero.
+
+## Security update: 2026-11-18
+
+The lockfile refreshes typescript-eslint to 8.73.0, which brings a patched
+minimatch without an override. The full npm audit reports zero vulnerabilities.
