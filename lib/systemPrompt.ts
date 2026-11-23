@@ -73,7 +73,7 @@ CRITICAL RULES:
 1. Every section MUST start with "### " (Titles, Description, Chapters, Clips).
 2. Use 1st person plural ("we", "us", "our") — write as the church itself.
 3. Separate sections with a double line break.
-4. No em-dashes (—), and avoid dashes (-) in general.
+4. Prefer not to use em dashes (they read as AI-written). This is a preference, not a ban; do not rewrite existing text just to remove them.
 
 ### Titles
 Provide exactly 3 title options (5-8 words). Avoid generic church language, passive phrasing, and sermon series names.

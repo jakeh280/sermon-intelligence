@@ -11,7 +11,7 @@ Key behaviors:
 - Generates 3 social clips with: Timestamps, Duration, Title, Transcript, Description, Why it works
 - Bans filler phrases: "we explore", "join us", "we discover"
 - Writes in 1st-person plural ("we", "us") as the church
-- NO em-dashes or unnecessary dashes
+- Prefer not to use em dashes in new copy (they read as AI-written). This is a preference, not a ban; don't rewrite existing copy just to remove them.
 - Double line breaks between sections
 - Clip duration must fall between `clipMinSec` and `clipMaxSec`, inclusive (equal min/max asks for that exact duration)
 
