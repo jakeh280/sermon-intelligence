@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText } from "ai";
+import { protectAiStreamErrors, sanitizeAiError } from "@/lib/aiErrorLog";
 import { sharedRateLimit } from "@/lib/sharedRateLimit";
 import { getClientIp } from "@/lib/proxyRateLimit";
 import { rateLimitMessage } from "@/lib/rateLimitMessage";
@@ -85,7 +86,7 @@ export async function POST(req: Request) {
   // Without this the request reaches the provider, fails after the stream has
   // already returned 200, and the user sees an empty result with no reason.
   if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    console.error("AI_ROUTE_ERROR: GOOGLE_GENERATIVE_AI_API_KEY is not set");
+    console.error({ event: "AI_ROUTE_ERROR", errorName: "ConfigurationError", statusCode: 503 });
     return jsonError(
       503,
       "The analysis service is not configured right now. Please try again later.",
@@ -129,15 +130,13 @@ export async function POST(req: Request) {
       // streamText is lazy, so a provider failure surfaces after the 200 has
       // gone out and never reaches the catch below. Log it with the same tag.
       onError: ({ error }) => {
-        console.error("AI_ROUTE_ERROR:", error);
+        console.error(sanitizeAiError(error));
       },
     });
 
-    return result.toTextStreamResponse();
+    return protectAiStreamErrors(result.toTextStreamResponse());
   } catch (err) {
-    // Full detail goes to the server log only; provider errors can carry
-    // request IDs, quota details, or config hints that visitors should not see.
-    console.error("AI_ROUTE_ERROR:", err);
+    console.error(sanitizeAiError(err));
     return jsonError(
       500,
       "The analysis failed on our end. Please try again in a minute.",
