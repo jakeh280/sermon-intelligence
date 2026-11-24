@@ -18,6 +18,8 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  "report-uri /api/csp-report",
+  "report-to csp-endpoint",
 ].join("; ");
 
 const nextConfig: NextConfig = {
@@ -28,6 +30,7 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy },
+          { key: "Reporting-Endpoints", value: 'csp-endpoint="/api/csp-report"' },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           {
