@@ -77,3 +77,19 @@ Its only patched line is minimatch 11, and the packages that pull it in (ESLint 
 
 The lockfile refreshes typescript-eslint to 8.73.0, which brings a patched
 minimatch without an override. The full npm audit reports zero vulnerabilities.
+
+## AI SDK maintenance: 2026-11-23
+
+Updated AI SDK 7.0.156 to 7.0.181 and the Google provider 4.0.107 to
+4.0.125. The lockfile also updates Gateway to 4.0.154, Provider to 4.0.39,
+and Provider Utils to 5.0.83. The patch release notes required no changes
+to the text streaming route. Provider Utils dropped its Undici dependency
+and no longer validates DNS at connection time by default for file
+downloads. The route sends transcript text to Google and accepts no file
+URLs for the SDK to fetch.
+
+The full npm audit reported zero vulnerabilities before and after the update.
+`npm audit fix --package-lock-only` found no fixes to apply. A clean install,
+lint, all 139 tests, and the production build passed. A local SDK smoke test
+verified request serialization and plain-text streaming with a mock Google
+response.
