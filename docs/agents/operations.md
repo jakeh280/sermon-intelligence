@@ -129,8 +129,11 @@ sitewide ceilings remain the bound for that and for any many-address abuse. IPv4
 is unchanged. No Worker change: it only ever receives a digest of this value.
 
 **Also on the route (same date):** non-JSON requests get a 415 (a cross-site
-`text/plain` POST skips the CORS preflight), provider error messages are logged but no
-longer returned to visitors, and `maxOutputTokens: 16000` caps a runaway generation.
+`text/plain` POST skips the CORS preflight), and `maxOutputTokens: 16000` caps a
+runaway generation. AI failures emit `AI_ROUTE_ERROR` with an allowlisted error
+name, an HTTP status if available, and a recognized provider status or code.
+Logs omit free-form error messages, request and response data, and credentials.
+Rejected response streams reach Next.js with a fixed error and no provider cause.
 
 **Persistent admission (2026-10-21):** The in-process proxy remains a cheap first filter, but the API route also obtains admission from `lib/sharedRateLimit.ts` after validating input and before contacting Gemini. A Cloudflare SQLite Durable Object serializes all decisions and persists them across application cold starts. Limits are 20 per address in a trailing hour, 2,000 sitewide per UTC day, and 20,000 sitewide per UTC calendar month (raised 2026-11-04 so ordinary traffic never trips the shared ceiling; a Google Cloud budget is the spending backstop). Preview deployments use a separate object, so testing cannot consume production's allowance. These are request ceilings, not a verified currency spending cap. A refused request returns 429 with Retry-After (the message says minutes, hours or days via `lib/rateLimitMessage.ts`). The Worker's refusal carries `scope`: `address` for the per-address limit, `site` for the sitewide day or month, so the message can say the limit applies to everyone. An answer without `scope`, from a Worker deployed before it existed, is read as `address`; counter failure returns 503 and makes no provider call.
 
