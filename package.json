@@ -11,9 +11,9 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts workers/abuse-limiter/worker.test.mjs"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.57",
+    "@ai-sdk/google": "^4.0.125",
     "@vercel/analytics": "^2.0.1",
-    "ai": "^7.0.156",
+    "ai": "^7.0.181",
     "lucide-react": "^1.64.0",
     "next": "^16.4.6",
     "react": "^19.2.8",
