@@ -35,7 +35,7 @@ export async function limiterHealth(
   }
 }
 
-export type LimitScope = "address" | "site";
+type LimitScope = "address" | "site";
 type Result =
   | { allowed: true }
   | { allowed: false; status: 429; retryAfter: number; scope: LimitScope }

@@ -1,7 +1,6 @@
 import { HISTORY_LIMIT, parseHistory, type HistoryItem } from "./history.ts";
 
 export const HISTORY_KEY = "sermon_history";
-export { HISTORY_LIMIT };
 
 /** The slice of `Storage` this module needs, so tests can supply a fake. */
 export type HistoryStorage = {

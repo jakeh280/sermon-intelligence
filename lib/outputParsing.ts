@@ -159,9 +159,9 @@ export const CLIP_FIELD_LABELS = [
   "Why it works",
 ] as const;
 
-export type ClipFieldKey = (typeof CLIP_FIELD_LABELS)[number];
+type ClipFieldKey = (typeof CLIP_FIELD_LABELS)[number];
 
-export type ParsedClip = Partial<Record<ClipFieldKey, string>> & {
+type ParsedClip = Partial<Record<ClipFieldKey, string>> & {
   optionLabel: string;
 };
 
@@ -227,7 +227,7 @@ function cleanOptionLabel(line: string): string {
   return cleaned || "Option";
 }
 
-export function parseClipFieldLines(
+function parseClipFieldLines(
   block: string,
 ): Partial<Record<ClipFieldKey, string>> {
   const lines = block.split("\n");

@@ -1,4 +1,4 @@
-export type BoundedBodyResult =
+type BoundedBodyResult =
   | { ok: true; text: string }
   | { ok: false; reason: "too-large" };
 
