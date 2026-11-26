@@ -95,3 +95,20 @@ test("unsupported, malformed, oversized and unreadable bodies receive an empty 2
   }
   assert.equal(log.mock.callCount(), 0);
 });
+
+test("valid reports share a bounded log allowance that recovers after a minute", async (t) => {
+  const log = t.mock.method(console, "info", () => {});
+  const now = t.mock.method(Date, "now", () => Date.UTC(2099, 0, 1));
+  const violation = {
+    type: "csp-violation",
+    body: { effectiveDirective: "img-src", documentURL: "https://sermon.example/" },
+  };
+  const batch = JSON.stringify(Array(40).fill(violation));
+  for (let i = 0; i < 2; i++) {
+    assert.equal((await POST(request(reportingType, batch))).status, 204);
+  }
+  assert.equal(log.mock.callCount(), 60);
+  now.mock.mockImplementation(() => Date.UTC(2099, 0, 1, 0, 1));
+  await POST(request(reportingType, JSON.stringify([violation])));
+  assert.equal(log.mock.callCount(), 61);
+});

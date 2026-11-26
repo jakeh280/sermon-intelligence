@@ -2,6 +2,9 @@ import { isIP } from "node:net";
 import { readBoundedBody } from "../../../lib/boundedBody.ts";
 
 const MAX_REPORT_BYTES = 8 * 1024;
+const MAX_LOGS_PER_MINUTE = 60;
+let logWindowEndsAt = 0;
+let loggedReports = 0;
 const LEGACY_REPORT = "application/csp-report";
 const REPORTING_API = "application/reports+json";
 
@@ -46,6 +49,14 @@ function logViolation(fields: Record<string, unknown>, legacy: boolean) {
   if (!directives.has(directive) || !document || !["https:", "http:"].includes(document.protocol)) {
     return;
   }
+
+  const now = Date.now();
+  if (now >= logWindowEndsAt) {
+    logWindowEndsAt = now + 60_000;
+    loggedReports = 0;
+  }
+  if (loggedReports >= MAX_LOGS_PER_MINUTE) return;
+  loggedReports++;
 
   const { disposition } = fields;
   console.info(JSON.stringify({

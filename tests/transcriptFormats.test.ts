@@ -364,3 +364,9 @@ test("very long transcripts normalize every block", () => {
   assert.equal(lines[lines.length - 1], `Synthetic body line ${blocks - 1}.`);
   assert.equal(normalized.includes("Unknown"), false);
 });
+
+test("a large multiline cue can reach the normal transcript length check", () => {
+  const lines = Array(150_000).fill("x").join("\n");
+  const normalized = normalizeTranscript("00:00:00,000 --> 00:00:01,000\n" + lines);
+  assert.equal(normalized, "[00:00:00:00]\n" + lines);
+});

@@ -122,7 +122,7 @@ function normalizeCaptions(lines: string[]): string | null {
 
     if (cues > 0) output.push("");
     output.push(cueTimestampToPromptTag(timing[1]));
-    output.push(...text);
+    for (const cueLine of text) output.push(cueLine);
     cues += 1;
   }
 

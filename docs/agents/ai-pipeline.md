@@ -63,6 +63,7 @@ export const ACCEPTED_EXTENSIONS = [".txt", ".srt", ".vtt"] as const;
   untouched rather than half converting it.
 - Milliseconds map to `:00` frames rather than guessing a frame rate, which is
   safe only because the prompt tells the model to ignore the frames component.
+- Multiline cues are copied line by line so large cues reach the normal transcript length check.
 - Normalizing is idempotent. Both `app/page.tsx` and the API route call it.
 
 ### Clip Range Slider
