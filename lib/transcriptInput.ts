@@ -32,7 +32,7 @@ export const TOO_LONG_MESSAGE = `Transcript is too long. Please trim it to under
   "en-US",
 )} characters (approximately 2 hours of speech).`;
 
-export function extension(name: string): string {
+function extension(name: string): string {
   const index = name.lastIndexOf(".");
   return index >= 0 ? name.slice(index).toLowerCase() : "";
 }

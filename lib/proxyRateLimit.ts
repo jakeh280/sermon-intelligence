@@ -19,7 +19,7 @@
 import { ipv6Network64, isCloudflareIp } from "./cloudflareIps.ts";
 
 /** The slice of `Headers` this module needs, so tests can supply a plain object. */
-export type HeaderReader = { get(name: string): string | null };
+type HeaderReader = { get(name: string): string | null };
 
 /**
  * The address to rate-limit on. Vercel overwrites `x-forwarded-for` with the
@@ -64,7 +64,7 @@ function evictEmpty(
   }
 }
 
-export type RateLimitResult =
+type RateLimitResult =
   | { limited: false }
   | { limited: true; resetInMinutes: number };
 

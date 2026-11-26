@@ -9,6 +9,7 @@ sermon-intelligence/
 │   ├── layout.tsx            # RootLayout, metadata
 │   ├── globals.css           # Tailwind imports, CSS variables
 │   ├── error.tsx             # Friendly route error recovery
+│   ├── favicon.ico           # Browser icon served by Next.js
 │   ├── opengraph-image.tsx   # Generated social sharing image
 │   └── api/
 │       └── chat/
@@ -49,7 +50,7 @@ sermon-intelligence/
 │   ├── proxyRateLimit.test.ts         # Rate limit window, reset message, per-IP keying
 │   ├── systemPrompt.test.ts          # Prompt construction and timestamp rules
 │   └── transcriptFormats.test.ts     # Timestamp and caption formats
-├── public/                   # Static assets: robots.txt, llms.txt, SVGs, favicon
+├── public/                   # Static assets: robots.txt, llms.txt
 ├── proxy.ts                  # Next.js middleware (Next 16 convention): per-IP rate limiting
 ├── tsconfig.json
 ├── next.config.ts            # Security response headers

@@ -11,7 +11,7 @@ import {
   parseClipOptions,
 } from "./outputParsing.ts";
 
-export type OutputIssueCode =
+type OutputIssueCode =
   | "empty"
   | "unstructured"
   | "missing-sections"
@@ -36,7 +36,7 @@ const EXPECTED_SECTIONS = [
 // Timestamps and Duration rather than leaving those fields blank.
 const EXPECTED_CLIP_COUNT = 3;
 
-export const EMPTY_OUTPUT_MESSAGE =
+const EMPTY_OUTPUT_MESSAGE =
   "The AI returned an empty response. Nothing was generated, so please try again.";
 
 function listSectionNames(names: string[]): string {
