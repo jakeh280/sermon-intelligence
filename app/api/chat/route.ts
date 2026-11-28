@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   // The app always posts JSON. A cross-site form or text/plain POST skips the
   // CORS preflight entirely, so without this check another page could make a
   // visitor's browser spend Gemini calls against this route.
-  if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+  if (req.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") {
     return jsonError(415, "Expected a JSON request body.");
   }
 
@@ -45,17 +45,16 @@ export async function POST(req: Request) {
   // pays that full cost regardless of what happens next. This bounds the
   // read itself, refusing as soon as either the declared Content-Length or
   // the actual bytes read cross the cap.
-  const bounded = await readBoundedBody(
-    req.body,
-    req.headers.get("content-length"),
-    MAX_REQUEST_BODY_BYTES,
-  );
-  if (!bounded.ok) {
-    return jsonError(413, TOO_LONG_MESSAGE);
-  }
-
   let body: unknown;
   try {
+    const bounded = await readBoundedBody(
+      req.body,
+      req.headers.get("content-length"),
+      MAX_REQUEST_BODY_BYTES,
+    );
+    if (!bounded.ok) {
+      return jsonError(413, TOO_LONG_MESSAGE);
+    }
     body = JSON.parse(bounded.text);
   } catch {
     return jsonError(400, "Invalid JSON body");
