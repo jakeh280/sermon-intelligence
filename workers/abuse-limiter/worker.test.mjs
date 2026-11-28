@@ -106,3 +106,13 @@ test('authenticated health probes exercise storage without using any allowance',
     assert.equal((await f.consume()).allowed, false);
   } finally { f.db.close(); }
 });
+
+test('worker enforces the byte limit on a lengthless UTF-8 request', async () => {
+  const env = { LIMITER_SECRET: 'test', BUDGET: { idFromName: name => name } };
+  const body = JSON.stringify({ ip: 'a'.repeat(64), note: 'é'.repeat(30) });
+  assert.ok(body.length <= 128 && Buffer.byteLength(body) > 128);
+  const request = new Request('https://limits.example/consume/preview', {
+    method: 'POST', headers: { Authorization: 'Bearer test' }, body,
+  });
+  assert.equal((await worker.fetch(request, env)).status, 413);
+});

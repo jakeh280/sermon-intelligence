@@ -95,7 +95,7 @@ Parsing is deliberately tolerant of formatting the model drifts into: option
 headers behind bold, headings or bullets; field labels with the colon inside the
 bold; treating `### ` and `## ` as the *same* heading level (see below); and
 heading-shaped lines inside a fenced code block, which are masked before
-splitting so a quoted excerpt can't be mistaken for a section boundary. An
+splitting so a quoted excerpt can't be mistaken for a section boundary. Section bodies are sliced from the original output so literal text in a fence survives parsing. An
 option header must still be the entire line, so quoted text cannot split a
 clip, and a clip field label only starts a new field when it's the next
 expected one (or that field's own exact label, not a looser alias) - so a

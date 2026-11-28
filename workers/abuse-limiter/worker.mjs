@@ -1,3 +1,5 @@
+import { readBoundedBody } from '../../lib/boundedBody.ts';
+
 export const WINDOW_MS = 3600000;
 // Per address within WINDOW_MS, matching RATE_LIMIT_MAX_REQUESTS in lib/rateLimitConfig.ts.
 export const ADDRESS_LIMIT = 20;
@@ -81,11 +83,14 @@ const worker = {
     }
     const id = env.BUDGET.idFromName(path.endsWith('/production') ? 'production' : 'preview');
     if (health) return env.BUDGET.get(id).fetch(new Request('https://internal/health'));
-    if (Number(request.headers.get('Content-Length') || 0) > 128) return new Response(null, { status: 413 });
-    const text = await request.text();
-    if (text.length > 128) return new Response(null, { status: 413 });
     let body;
-    try { body = JSON.parse(text); } catch { return new Response(null, { status: 400 }); }
+    try {
+      const bounded = await readBoundedBody(request.body, request.headers.get('Content-Length'), 128);
+      if (!bounded.ok) return new Response(null, { status: 413 });
+      body = JSON.parse(bounded.text);
+    } catch {
+      return new Response(null, { status: 400 });
+    }
     if (typeof body?.ip !== 'string' || !/^[a-f0-9]{64}$/.test(body.ip)) return new Response(null, { status: 400 });
     return env.BUDGET.get(id).fetch(new Request('https://internal/consume', { method: 'POST', body: JSON.stringify({ ip: body.ip }) }));
   },
