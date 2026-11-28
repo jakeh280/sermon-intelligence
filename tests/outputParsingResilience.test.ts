@@ -338,3 +338,10 @@ test("sibling sections at different heading levels are both recovered, not just 
     "Synthetic description",
   );
 });
+
+test("literal text resembling an internal fence marker survives parsing", () => {
+  const body = ["~~~", "\uE000FENCE_LINE_3\uE000", "### quoted heading", "~~~"].join("\n");
+  assert.deepEqual(parseBentoSections("### Description\n" + body), [
+    { title: "Description", body },
+  ]);
+});

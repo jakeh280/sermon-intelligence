@@ -3,18 +3,8 @@ export type BentoSection = { title: string; body: string };
 const FENCE_DELIMITER = /^(?:```|~~~)/;
 
 /**
- * Replaces every line strictly inside a fenced code block (the delimiter
- * lines themselves are never heading shaped, so they're left alone) with an
- * opaque placeholder that can't match a heading pattern - so a "### "/"## "
- * shaped line quoted inside a fence can't be mistaken for a real section
- * boundary. The prompt never asks the model to fence anything, so this is
- * about robustness against drift rather than a case seen in practice.
- *
- * Not extended to blockquotes: a `> ### heading` is, per CommonMark, a
- * heading *inside* the blockquote rather than a top-level one, which this
- * string-based splitter (it works on raw section boundaries, not a real
- * markdown AST) doesn't model correctly either way - narrower than this
- * audit finding, and not worth solving as a side effect of it.
+ * Masks heading markers inside paired fences. Preserve character offsets so
+ * sections can be sliced directly from the original Markdown.
  *
  * An unpaired fence delimiter (the model opens one and never closes it)
  * masks nothing at all rather than masking everything from there to the end
@@ -23,47 +13,30 @@ const FENCE_DELIMITER = /^(?:```|~~~)/;
  * make this hardening actively worse than the unhardened behavior for that
  * drift case, not just ineffective against it.
  */
-function maskFencedLines(markdown: string): {
-  masked: string;
-  restore: (text: string) => string;
-} {
+function maskFencedLines(markdown: string): string {
   let inFence = false;
-  const placeholders = new Map<string, string>();
-
-  const maskedLines = markdown.split("\n").map((line, index) => {
-    const isDelimiter = FENCE_DELIMITER.test(line);
-    const wasInFence = inFence;
-    if (isDelimiter) inFence = !inFence;
-    if (!wasInFence || isDelimiter) return line;
-
-    const placeholder = `FENCE_LINE_${index}`;
-    placeholders.set(placeholder, line);
-    return placeholder;
+  const lines = markdown.split("\n").map((line) => {
+    if (FENCE_DELIMITER.test(line)) {
+      inFence = !inFence;
+    } else if (inFence && line.startsWith("#")) {
+      return "x" + line.slice(1);
+    }
+    return line;
   });
-
-  if (inFence) {
-    // The fence never closed, so nothing above should have been masked.
-    return { masked: markdown, restore: (text: string) => text };
-  }
-
-  return {
-    masked: maskedLines.join("\n"),
-    restore: (text: string) => {
-      let result = text;
-      for (const [placeholder, original] of placeholders) {
-        result = result.split(placeholder).join(original);
-      }
-      return result;
-    },
-  };
+  return inFence ? markdown : lines.join("\n");
 }
 
 function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
-  const { masked, restore } = maskFencedLines(markdown);
-  const parts = masked.split(heading);
+  const parts: string[] = [];
+  let start = 0;
+  for (const match of maskFencedLines(markdown).matchAll(heading)) {
+    parts.push(markdown.slice(start, match.index));
+    start = match.index + match[0].length;
+  }
+  parts.push(markdown.slice(start));
   const sections: BentoSection[] = [];
 
-  const preamble = restore(parts[0]?.trim() ?? "");
+  const preamble = parts[0]?.trim() ?? "";
   if (preamble) {
     sections.push({ title: DRAFT_SECTION_TITLE, body: preamble });
   }
@@ -71,12 +44,8 @@ function splitOnHeading(markdown: string, heading: RegExp): BentoSection[] {
   for (let index = 1; index < parts.length; index += 1) {
     const chunk = parts[index] ?? "";
     const newline = chunk.indexOf("\n");
-    const title = restore(
-      newline === -1 ? chunk.trim() : chunk.slice(0, newline).trim(),
-    );
-    const body = restore(
-      newline === -1 ? "" : chunk.slice(newline + 1).trimEnd(),
-    );
+    const title = newline === -1 ? chunk.trim() : chunk.slice(0, newline).trim();
+    const body = newline === -1 ? "" : chunk.slice(newline + 1).trimEnd();
     if (title || body) {
       sections.push({ title: title || "Section", body });
     }
@@ -137,7 +106,7 @@ function mergeStraySections(sections: BentoSection[]): BentoSection[] {
 // which level the model used for which section. "####" is deliberately
 // excluded: it's plausible as a subheading inside a well formed section, so
 // treating it as a boundary could shred a response rather than rescue one.
-const HEADING_MARKER = /^#{2,3}\s+/m;
+const HEADING_MARKER = /^#{2,3}\s+/gm;
 
 export function parseBentoSections(markdown: string): BentoSection[] {
   const trimmed = markdown.replace(/^\uFEFF/, "");
